@@ -48,7 +48,8 @@ import {
   MapPin,
   ExternalLink,
   Loader2,
-  QrCode
+  QrCode,
+  Copy
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Student, Transaction, DashboardStats, Announcement, Syllabus, Schedule, OnlineClass, User, HomeworkClasswork, Datesheet } from './types';
@@ -69,6 +70,12 @@ import { ChatBot } from './components/ChatBot';
 import { QRScanner } from './components/QRScanner';
 
 const BASE_URL = process.env.APP_URL || '';
+
+const LoadingSpinner = () => (
+  <div className="flex justify-center items-center h-64">
+    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+  </div>
+);
 
 const ShahwilayatApp = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'students' | 'finance' | 'canteen' | 'news' | 'syllabus' | 'schedules' | 'online' | 'attendance' | 'homework' | 'datesheets' | 'results' | 'about' | 'admins'>('dashboard');
@@ -875,9 +882,64 @@ const ShahwilayatApp = () => {
                   <button type="submit" className="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-accent transition-all shadow-lg shadow-primary/20 mt-2">
                     Sign In
                   </button>
+                  
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setLoginForm({ username: 'admin', password: 'admin123', type: 'admin' });
+                        setTimeout(() => {
+                          const form = document.querySelector('form') as HTMLFormElement;
+                          if (form) form.requestSubmit();
+                        }, 100);
+                      }}
+                      className="w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200 transition-all flex justify-center items-center gap-2"
+                    >
+                      <UserIcon size={18} /> Guest Login (Admin)
+                    </button>
+                  </div>
                 </form>
               </>
             )}
+          </div>
+        </motion.div>
+
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white/80 backdrop-blur-md p-4 rounded-2xl shadow-sm border border-gray-100 w-full max-w-md flex flex-col items-center gap-2 mb-8"
+        >
+          <div className="flex items-center gap-2 text-gray-600 font-medium text-sm">
+            <Globe size={16} className="text-primary" />
+            Public App Link
+          </div>
+          <div className="flex items-center gap-2 w-full bg-gray-50 p-2 rounded-xl border border-gray-200">
+            <input 
+              type="text" 
+              readOnly 
+              value={window.location.href} 
+              className="bg-transparent text-xs text-gray-500 w-full outline-none px-2 font-mono truncate"
+            />
+            <button 
+              onClick={() => {
+                navigator.clipboard.writeText(window.location.href);
+                showToast('Link copied to clipboard!');
+              }}
+              className="p-2 bg-white rounded-lg shadow-sm border border-gray-200 text-gray-600 hover:text-primary hover:border-primary transition-colors flex-shrink-0"
+              title="Copy Link"
+            >
+              <Copy size={16} />
+            </button>
+            <a 
+              href={window.location.href} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="p-2 bg-primary text-white rounded-lg shadow-sm hover:bg-accent transition-colors flex-shrink-0"
+              title="Open in new tab"
+            >
+              <ExternalLink size={16} />
+            </a>
           </div>
         </motion.div>
 
@@ -1257,6 +1319,51 @@ const ShahwilayatApp = () => {
                 </div>
               ) : (
                 <>
+                  {user.role === 'admin' && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-gradient-to-r from-indigo-50 to-blue-50 p-6 rounded-3xl border border-indigo-100 shadow-sm mb-8 flex flex-col md:flex-row items-center justify-between gap-4"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm">
+                          <Globe size={24} />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold text-gray-900">Share School Portal</h3>
+                          <p className="text-sm text-gray-600">Share this link with students and staff to give them access.</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-indigo-100 shadow-sm w-full md:w-auto flex-1 max-w-md">
+                        <input 
+                          type="text" 
+                          readOnly 
+                          value={window.location.href} 
+                          className="bg-transparent text-sm text-gray-600 w-full outline-none px-2 font-mono truncate"
+                        />
+                        <button 
+                          onClick={() => {
+                            navigator.clipboard.writeText(window.location.href);
+                            showToast('Link copied to clipboard!');
+                          }}
+                          className="p-2 bg-indigo-50 rounded-lg text-indigo-600 hover:bg-indigo-100 transition-colors flex-shrink-0"
+                          title="Copy Link"
+                        >
+                          <Copy size={18} />
+                        </button>
+                        <a 
+                          href={window.location.href} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex-shrink-0"
+                          title="Open in new tab"
+                        >
+                          <ExternalLink size={18} />
+                        </a>
+                      </div>
+                    </motion.div>
+                  )}
+                  
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     {[
                       { label: 'Total Students', value: stats.totalStudents, icon: Users, color: 'bg-blue-50 text-blue-600' },
@@ -3885,6 +3992,7 @@ const ShahwilayatApp = () => {
         )}
 
         {showTopUp && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -3964,11 +4072,11 @@ const ShahwilayatApp = () => {
               {toast.message}
             </motion.div>
           )}
-        </AnimatePresence>
-        <ChatBot studentData={selectedStudent} userType={user?.role || null} />
-      </div>
-    );
-  };
+      </AnimatePresence>
+      <ChatBot studentData={selectedStudent} userType={user?.role || null} />
+    </div>
+  );
+};
 
 export default function App() {
   return <ShahwilayatApp />;
