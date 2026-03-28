@@ -1,0 +1,33 @@
+# Shahwilayat Public School - Play Store Description
+
+## Short Description (Max 80 characters)
+Manage student records, canteen payments, and academic schedules in one app.
+
+## Full Description (Max 4000 characters)
+**Shahwilayat Public School: Your All-in-One School Management Companion**
+
+Welcome to the official mobile application for Shahwilayat Public School. Designed to streamline communication and management, our app provides a seamless experience for students, parents, and administrators.
+
+### 🎓 Key Features for Students & Parents:
+- **Academic Dashboard:** Access your homework, classwork, and syllabus anytime, anywhere.
+- **Real-time Attendance:** Stay updated with daily attendance records and monthly reports.
+- **Digital Wallet & Canteen:** Pay for canteen meals securely using your student ID. Track your spending and balance in real-time.
+- **Exam Schedules:** View datesheets and exam timings directly on your phone.
+- **Online Classes:** Join live sessions with integrated meeting links for a smooth learning experience.
+- **Announcements:** Never miss an update! Get instant notifications for school news and events.
+
+### 🛠️ Key Features for Administrators:
+- **Student Management:** Effortlessly manage student profiles, grades, and records.
+- **Financial Control:** Oversee canteen transactions, manage student wallets, and distribute funds.
+- **Academic Planning:** Update syllabus, schedules, and datesheets with a few clicks.
+- **Attendance Tracking:** Mark and monitor attendance for the entire school with ease.
+
+### 🔒 Secure & Reliable
+- **Privacy First:** Your data is protected with industry-standard encryption.
+- **Role-Based Access:** Personalized experience for students, admins, and canteen staff.
+- **User-Friendly Interface:** Clean, modern design optimized for mobile devices.
+
+**About Shahwilayat Public School**
+Shahwilayat Public School is committed to providing quality education and fostering a digital-first environment for its community. This app is part of our mission to integrate technology into everyday school life for better efficiency and transparency.
+
+**Download now and stay connected with Shahwilayat Public School!**
