@@ -7,6 +7,9 @@ export interface Student {
   section: string;
   parent_contact: string;
   parent_email?: string;
+  emergency_contact?: string;
+  academic_notes?: string;
+  medical_notes?: string;
   photo_url?: string;
   cnic: string;
   computer_number?: string;
@@ -79,6 +82,8 @@ export interface Schedule {
   time_slot: string;
   subject: string;
   teacher: string;
+  location?: string;
+  is_weekend?: boolean;
 }
 
 export interface OnlineClass {

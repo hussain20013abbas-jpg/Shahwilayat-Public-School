@@ -49,8 +49,12 @@ import {
   ExternalLink,
   Loader2,
   QrCode,
-  Copy
+  Copy,
+  Mail,
+  Bot,
+  Sparkles
 } from 'lucide-react';
+import { GoogleGenAI } from "@google/genai";
 import { motion, AnimatePresence } from 'motion/react';
 import { Student, Transaction, DashboardStats, Announcement, Syllabus, Schedule, OnlineClass, User, HomeworkClasswork, Datesheet } from './types';
 
@@ -67,6 +71,7 @@ import {
   CartesianGrid
 } from 'recharts';
 import { ChatBot } from './components/ChatBot';
+import { VoiceChat } from './components/VoiceChat';
 import { QRScanner } from './components/QRScanner';
 
 const BASE_URL = process.env.APP_URL || '';
@@ -78,10 +83,10 @@ const LoadingSpinner = () => (
 );
 
 const ShahwilayatApp = () => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'students' | 'finance' | 'canteen' | 'news' | 'syllabus' | 'schedules' | 'online' | 'attendance' | 'homework' | 'datesheets' | 'results' | 'about' | 'admins'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'students' | 'finance' | 'canteen' | 'news' | 'syllabus' | 'schedules' | 'online' | 'attendance' | 'homework' | 'datesheets' | 'results' | 'about' | 'admins' | 'profile' | 'ai'>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [user, setUser] = useState<User | null>(null);
-  const [loginForm, setLoginForm] = useState({ username: '', password: '', type: 'student' as 'admin' | 'student' });
+  const [loginForm, setLoginForm] = useState({ username: '', password: '', email: '' });
   const [loginError, setLoginError] = useState('');
   const [multipleProfiles, setMultipleProfiles] = useState<any[] | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -122,14 +127,14 @@ const ShahwilayatApp = () => {
 
   // Form states
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
-  const [newStudent, setNewStudent] = useState({ name: '', roll_no: '', grade: '', class: '', section: '', parent_contact: '', parent_email: '', photo_url: '', cnic: '', computer_number: '', password: '' });
+  const [newStudent, setNewStudent] = useState({ name: '', roll_no: '', grade: '', class: '', section: '', parent_contact: '', parent_email: '', emergency_contact: '', academic_notes: '', medical_notes: '', photo_url: '', cnic: '', computer_number: '', password: '' });
   const [newTransaction, setNewTransaction] = useState({ student_id: '', amount: '', type: 'credit' as 'credit' | 'debit', fee_type: 'tuition' as any, description: '' });
   const [newAnnouncement, setNewAnnouncement] = useState({ title: '', content: '', category: 'General' as any, image_url: '', is_featured: false });
   const [newGrade, setNewGrade] = useState({ subject: '', marks: '', total_marks: '', term: '' });
   const [newHomework, setNewHomework] = useState({ type: 'Homework' as 'Homework' | 'Classwork', grade: '', class: '', section: '', subject: '', content: '', date_due: '' });
   const [newDatesheet, setNewDatesheet] = useState({ exam_name: '', grade: '', subject: '', date: '', time: '' });
   const [newSyllabus, setNewSyllabus] = useState({ subject: '', grade: '', content: '', file_url: '' });
-  const [newSchedule, setNewSchedule] = useState({ grade: '', day: 'Monday', time_slot: '', subject: '', teacher: '' });
+  const [newSchedule, setNewSchedule] = useState({ grade: '', day: 'Monday', time_slot: '', subject: '', teacher: '', location: '', is_weekend: false });
   const [newOnlineClass, setNewOnlineClass] = useState({ grade: '', subject: '', link: '', time: '' });
   const [newAdmin, setNewAdmin] = useState({ name: '', username: '', password: '', role: 'admin' });
   const [resetForm, setResetForm] = useState({ type: 'student' as 'student' | 'admin' | 'canteen', identifier: '', verification: '', new_password: '' });
@@ -146,6 +151,30 @@ const ShahwilayatApp = () => {
   const [canteenAmount, setCanteenAmount] = useState('');
   const [canteenProcessing, setCanteenProcessing] = useState(false);
   const [canteenPassword, setCanteenPassword] = useState('');
+
+  const [aiInput, setAiInput] = useState('');
+  const [aiResponse, setAiResponse] = useState('');
+  const [isAiLoading, setIsAiLoading] = useState(false);
+
+  const handleAiSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!aiInput.trim()) return;
+    
+    setIsAiLoading(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: aiInput,
+      });
+      setAiResponse(response.text || 'No response generated.');
+    } catch (error) {
+      console.error('AI Error:', error);
+      setAiResponse('Error connecting to Gemini AI.');
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
 
   useEffect(() => {
     const savedUser = localStorage.getItem('swps_user');
@@ -180,11 +209,30 @@ const ShahwilayatApp = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
+    
+    let type = 'student';
+    let payloadUsername = loginForm.username;
+    let payloadPassword = loginForm.password;
+
+    if (loginForm.username.toLowerCase() === 'admin' && loginForm.password.toLowerCase() === 'admin 123') {
+      type = 'admin';
+      payloadUsername = 'admin';
+      payloadPassword = 'admin123';
+    } else if (loginForm.username.toLowerCase() === 'canteen' && loginForm.password.toLowerCase() === 'canteen 123') {
+      type = 'canteen';
+      payloadUsername = 'canteen';
+      payloadPassword = 'canteen123';
+    } else if (loginForm.username === 'admin' && loginForm.password === 'admin123') {
+      type = 'admin';
+    } else if (loginForm.username === 'canteen' && loginForm.password === 'canteen123') {
+      type = 'canteen';
+    }
+
     try {
       const res = await fetch(`${BASE_URL}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(loginForm)
+        body: JSON.stringify({ username: payloadUsername, password: payloadPassword, type })
       });
       if (res.ok) {
         const userData = await res.json();
@@ -365,7 +413,7 @@ const ShahwilayatApp = () => {
       });
       if (res.ok) {
         setShowAddStudent(false);
-        setNewStudent({ name: '', roll_no: '', grade: '', class: '', section: '', parent_contact: '', parent_email: '', photo_url: '', cnic: '', computer_number: '', password: '' });
+        setNewStudent({ name: '', roll_no: '', grade: '', class: '', section: '', parent_contact: '', parent_email: '', emergency_contact: '', academic_notes: '', medical_notes: '', photo_url: '', cnic: '', computer_number: '', password: '' });
         fetchData();
       }
     } catch (error) {
@@ -614,7 +662,7 @@ const ShahwilayatApp = () => {
       });
       if (res.ok) {
         setShowAddSchedule(false);
-        setNewSchedule({ grade: '', day: 'Monday', time_slot: '', subject: '', teacher: '' });
+        setNewSchedule({ grade: '', day: 'Monday', time_slot: '', subject: '', teacher: '', location: '', is_weekend: false });
         fetchData();
       }
     } catch (error) {
@@ -812,31 +860,10 @@ const ShahwilayatApp = () => {
               </div>
             ) : (
               <>
-                <div className="flex p-1 bg-gray-100 rounded-xl mb-6">
-                  <button 
-                    onClick={() => setLoginForm({...loginForm, type: 'student'})}
-                    className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${loginForm.type === 'student' ? 'bg-primary text-white shadow-md' : 'text-gray-500 hover:bg-gray-200'}`}
-                  >
-                    Student
-                  </button>
-                  <button 
-                    onClick={() => setLoginForm({...loginForm, type: 'admin'})}
-                    className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${loginForm.type === 'admin' ? 'bg-primary text-white shadow-md' : 'text-gray-500 hover:bg-gray-200'}`}
-                  >
-                    Admin
-                  </button>
-                  <button 
-                    onClick={() => setLoginForm({...loginForm, type: 'canteen'})}
-                    className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${loginForm.type === 'canteen' ? 'bg-primary text-white shadow-md' : 'text-gray-500 hover:bg-gray-200'}`}
-                  >
-                    Canteen
-                  </button>
-                </div>
-
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {loginForm.type === 'student' ? 'CNIC Number' : loginForm.type === 'canteen' ? 'Username' : 'Username'}
+                      Username or I.D.
                     </label>
                     <div className="relative">
                       <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
@@ -844,14 +871,14 @@ const ShahwilayatApp = () => {
                         required
                         type="text" 
                         className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-                        placeholder={loginForm.type === 'student' ? '12345-1234567-1' : loginForm.type === 'canteen' ? 'canteen' : 'admin'}
+                        placeholder="Enter Username or I.D."
                         value={loginForm.username}
                         onChange={e => setLoginForm({...loginForm, username: e.target.value})}
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Password or Phone Number</label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                       <input 
@@ -882,22 +909,6 @@ const ShahwilayatApp = () => {
                   <button type="submit" className="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-accent transition-all shadow-lg shadow-primary/20 mt-2">
                     Sign In
                   </button>
-                  
-                  <div className="mt-4 pt-4 border-t border-gray-100">
-                    <button 
-                      type="button"
-                      onClick={() => {
-                        setLoginForm({ username: 'admin', password: 'admin123', type: 'admin' });
-                        setTimeout(() => {
-                          const form = document.querySelector('form') as HTMLFormElement;
-                          if (form) form.requestSubmit();
-                        }, 100);
-                      }}
-                      className="w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200 transition-all flex justify-center items-center gap-2"
-                    >
-                      <UserIcon size={18} /> Guest Login (Admin)
-                    </button>
-                  </div>
                 </form>
               </>
             )}
@@ -1041,29 +1052,23 @@ const ShahwilayatApp = () => {
 
         <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
           {[
-            { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-            ...(user.role === 'admin' ? [
-              { id: 'students', icon: Users, label: 'Students' },
-              { id: 'finance', icon: Wallet, label: 'Finance' },
-              { id: 'canteen', icon: Coffee, label: 'Canteen' },
-              { id: 'admins', icon: Settings, label: 'Manage Admins' },
-            ] : user.role === 'canteen' ? [
-              { id: 'canteen', icon: Coffee, label: 'Canteen' },
-              { id: 'finance', icon: Wallet, label: 'Finance' },
-            ] : [
-              { id: 'finance', icon: Wallet, label: 'My Wallet' },
-            ]),
-            { id: 'news', icon: Megaphone, label: 'News Feed' },
-            { id: 'attendance', icon: FileCheck, label: 'Attendance' },
-            { id: 'homework', icon: ClipboardList, label: 'Homework' },
-            { id: 'datesheets', icon: CalendarDays, label: 'Datesheets' },
-            { id: 'results', icon: Award, label: 'Results' },
-            { id: 'syllabus', icon: BookOpen, label: 'Syllabus' },
-            { id: 'schedules', icon: Calendar, label: 'Schedules' },
-            { id: 'online', icon: Video, label: 'Online Classes' },
-            { id: 'about', icon: Info, label: 'About Us' },
-            { id: 'scan', icon: QrCode, label: 'Scan QR Code', onClick: () => setShowQRScanner(true) },
-          ].map((item: any) => (
+            { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'student', 'canteen'] },
+            { id: 'students', icon: Users, label: 'Students', roles: ['admin', 'canteen'] },
+            { id: 'finance', icon: Wallet, label: user.role === 'student' ? 'My Wallet' : 'Finance', roles: ['admin', 'canteen', 'student'] },
+            { id: 'canteen', icon: Coffee, label: 'Canteen', roles: ['admin', 'canteen'] },
+            { id: 'admins', icon: Settings, label: 'Manage Admins', roles: ['admin'] },
+            { id: 'news', icon: Megaphone, label: 'News Feed', roles: ['admin', 'student', 'canteen'] },
+            { id: 'attendance', icon: FileCheck, label: 'Attendance', roles: ['admin', 'student'] },
+            { id: 'homework', icon: ClipboardList, label: 'Homework', roles: ['admin', 'student'] },
+            { id: 'datesheets', icon: CalendarDays, label: 'Datesheets', roles: ['admin', 'student'] },
+            { id: 'results', icon: Award, label: 'Results', roles: ['admin', 'student'] },
+            { id: 'syllabus', icon: BookOpen, label: 'Syllabus', roles: ['admin', 'student'] },
+            { id: 'schedules', icon: Calendar, label: 'Schedules', roles: ['admin', 'student'] },
+            { id: 'online', icon: Video, label: 'Online Classes', roles: ['admin', 'student'] },
+            { id: 'ai', icon: Bot, label: 'AI Assistant', roles: ['admin', 'student', 'canteen'] },
+            { id: 'about', icon: Info, label: 'About Us', roles: ['admin', 'student', 'canteen'] },
+            { id: 'scan', icon: QrCode, label: 'Scan QR Code', onClick: () => setShowQRScanner(true), roles: ['admin', 'student', 'canteen'] },
+          ].filter(item => item.roles.includes(user.role)).map((item: any) => (
             <button 
               key={item.id}
               onClick={() => item.onClick ? item.onClick() : setActiveTab(item.id as any)}
@@ -1102,11 +1107,14 @@ const ShahwilayatApp = () => {
           <div className="flex items-center gap-4">
             {user.role === 'student' ? (
               <>
-                <button onClick={() => setActiveTab('dashboard')} className="text-primary p-2 hover:bg-primary/10 rounded-lg transition-colors">
+                <button onClick={() => setActiveTab('dashboard')} className={`p-2 rounded-lg transition-colors ${activeTab === 'dashboard' ? 'bg-primary/10 text-primary' : 'text-gray-400 hover:bg-gray-100'}`}>
                   <Home size={24} />
                 </button>
-                <button className="text-primary p-2 hover:bg-primary/10 rounded-lg transition-colors">
+                <button onClick={() => setActiveTab('profile')} className={`p-2 rounded-lg transition-colors ${activeTab === 'profile' ? 'bg-primary/10 text-primary' : 'text-gray-400 hover:bg-gray-100'}`}>
                   <Users size={24} />
+                </button>
+                <button onClick={() => setActiveTab('ai')} className={`p-2 rounded-lg transition-colors ${activeTab === 'ai' ? 'bg-primary/10 text-primary' : 'text-gray-400 hover:bg-gray-100'}`}>
+                  <Bot size={24} />
                 </button>
                 <div className="w-10 h-10 rounded-full bg-primary/10 border-2 border-white shadow-sm overflow-hidden">
                   <img 
@@ -1143,6 +1151,125 @@ const ShahwilayatApp = () => {
         </header>
 
         <div className="p-6 md:p-8">
+          {activeTab === 'profile' && user.role === 'student' && selectedStudent && (
+            <div className="space-y-8">
+              <h3 className="text-2xl font-bold text-gray-900">Student Profile</h3>
+              <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100">
+                <div className="flex flex-col md:flex-row items-center md:items-start gap-8">
+                  <div className="w-32 h-32 rounded-full bg-primary/10 border-4 border-white shadow-lg overflow-hidden flex-shrink-0">
+                    <img 
+                      src={selectedStudent.photo_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedStudent.name}`} 
+                      alt="profile" 
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="flex-1 space-y-4 text-center md:text-left">
+                    <div>
+                      <h4 className="text-3xl font-bold text-gray-900">{selectedStudent.name}</h4>
+                      <p className="text-gray-500 font-medium">Roll No: {selectedStudent.roll_no}</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-100">
+                      <div>
+                        <p className="text-sm text-gray-500 mb-1">Grade</p>
+                        <p className="font-bold text-gray-900">{selectedStudent.grade}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500 mb-1">Class & Section</p>
+                        <p className="font-bold text-gray-900">{selectedStudent.class} - {selectedStudent.section}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500 mb-1">Parent Contact</p>
+                        <p className="font-bold text-gray-900">{selectedStudent.parent_contact || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500 mb-1">Parent Email</p>
+                        <p className="font-bold text-gray-900">{selectedStudent.parent_email || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500 mb-1">Emergency Contact</p>
+                        <p className="font-bold text-gray-900">{selectedStudent.emergency_contact || 'N/A'}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                {(selectedStudent.academic_notes || selectedStudent.medical_notes) && (
+                  <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6 pt-8 border-t border-gray-100">
+                    {selectedStudent.academic_notes && (
+                      <div className="bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100/50">
+                        <h5 className="font-bold text-indigo-900 mb-2 flex items-center gap-2">
+                          <BookOpen size={18} className="text-indigo-600" /> Academic Notes
+                        </h5>
+                        <p className="text-indigo-800/80 text-sm leading-relaxed">{selectedStudent.academic_notes}</p>
+                      </div>
+                    )}
+                    {selectedStudent.medical_notes && (
+                      <div className="bg-rose-50/50 p-6 rounded-2xl border border-rose-100/50">
+                        <h5 className="font-bold text-rose-900 mb-2 flex items-center gap-2">
+                          <AlertCircle size={18} className="text-rose-600" /> Medical Notes
+                        </h5>
+                        <p className="text-rose-800/80 text-sm leading-relaxed">{selectedStudent.medical_notes}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'ai' && (
+            <div className="space-y-8 max-w-4xl mx-auto">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center">
+                  <Sparkles className="text-indigo-600" size={24} />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900">Shah Wilayat Public School AI Assistant</h3>
+                  <p className="text-gray-500">Ask me anything about your studies, schedule, or general knowledge.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div className="md:col-span-2 bg-white rounded-3xl p-6 shadow-sm border border-gray-100 min-h-[400px] flex flex-col">
+                  <div className="flex-1 overflow-y-auto mb-6 space-y-4">
+                    {aiResponse ? (
+                      <div className="bg-gray-50 rounded-2xl p-6 prose prose-indigo max-w-none">
+                        <div className="whitespace-pre-wrap text-gray-700">{aiResponse}</div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-full text-gray-400 space-y-4 py-12">
+                        <Bot size={48} className="text-gray-300" />
+                        <p>How can I help you today?</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <form onSubmit={handleAiSubmit} className="relative">
+                    <input
+                      type="text"
+                      value={aiInput}
+                      onChange={(e) => setAiInput(e.target.value)}
+                      placeholder="Ask Gemini something..."
+                      className="w-full pl-6 pr-16 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                      disabled={isAiLoading}
+                    />
+                    <button
+                      type="submit"
+                      disabled={isAiLoading || !aiInput.trim()}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-primary text-white rounded-xl hover:bg-accent transition-colors disabled:opacity-50"
+                    >
+                      {isAiLoading ? <Loader2 size={20} className="animate-spin" /> : <Sparkles size={20} />}
+                    </button>
+                  </form>
+                </div>
+                
+                <div className="md:col-span-1">
+                  <VoiceChat />
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'dashboard' && stats && (
             <div className="space-y-8">
               {user.role === 'student' && selectedStudent ? (
@@ -1811,24 +1938,32 @@ const ShahwilayatApp = () => {
                     <th className="px-6 py-4 font-medium">Time</th>
                     <th className="px-6 py-4 font-medium">Subject</th>
                     <th className="px-6 py-4 font-medium">Teacher</th>
+                    <th className="px-6 py-4 font-medium">Location</th>
+                    <th className="px-6 py-4 font-medium">Type</th>
                     <th className="px-6 py-4 font-medium">Grade</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {schedules
-                    .filter(sch => user.role === 'admin' || sch.grade === user.grade)
+                    .filter(sch => user.role === 'admin' || sch.grade === user.grade || sch.grade === selectedStudent?.grade)
                     .map((sch) => (
                     <tr key={sch.id} className="even:bg-gray-50/50 hover:bg-indigo-50/30 transition-all">
                       <td className="px-6 py-4 font-medium text-gray-900">{sch.day}</td>
                       <td className="px-6 py-4 text-gray-500 text-sm">{sch.time_slot}</td>
                       <td className="px-6 py-4 text-gray-900 font-medium">{sch.subject}</td>
                       <td className="px-6 py-4 text-gray-500 text-sm">{sch.teacher}</td>
+                      <td className="px-6 py-4 text-gray-500 text-sm">{sch.location || 'N/A'}</td>
+                      <td className="px-6 py-4 text-gray-500 text-sm">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${sch.is_weekend ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                          {sch.is_weekend ? 'Weekend' : 'Weekday'}
+                        </span>
+                      </td>
                       <td className="px-6 py-4 text-gray-500 text-sm">{sch.grade}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {schedules.filter(sch => user.role === 'admin' || sch.grade === user.grade).length === 0 && (
+              {schedules.filter(sch => user.role === 'admin' || sch.grade === user.grade || sch.grade === selectedStudent?.grade).length === 0 && (
                 <div className="p-12 text-center text-gray-400">No schedules set for your grade.</div>
               )}
             </div>
@@ -2847,6 +2982,31 @@ const ShahwilayatApp = () => {
                     />
                   </div>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                    value={newStudent.emergency_contact}
+                    onChange={e => setNewStudent({...newStudent, emergency_contact: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Academic Notes</label>
+                  <textarea 
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none resize-none h-20"
+                    value={newStudent.academic_notes}
+                    onChange={e => setNewStudent({...newStudent, academic_notes: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Medical Notes</label>
+                  <textarea 
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none resize-none h-20"
+                    value={newStudent.medical_notes}
+                    onChange={e => setNewStudent({...newStudent, medical_notes: e.target.value})}
+                  />
+                </div>
                 <button type="submit" className="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-accent transition-all mt-4 shadow-lg shadow-primary/20">
                   Register Student
                 </button>
@@ -3572,6 +3732,30 @@ const ShahwilayatApp = () => {
                       value={newSchedule.teacher}
                       onChange={e => setNewSchedule({...newSchedule, teacher: e.target.value})}
                     />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                    <input 
+                      type="text" 
+                      className="w-full px-4 py-2 border border-gray-200 rounded-xl outline-none"
+                      value={newSchedule.location}
+                      onChange={e => setNewSchedule({...newSchedule, location: e.target.value})}
+                      placeholder="e.g. Room 101"
+                    />
+                  </div>
+                  <div className="flex items-center mt-6">
+                    <input 
+                      type="checkbox" 
+                      id="is_weekend"
+                      className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                      checked={newSchedule.is_weekend}
+                      onChange={e => setNewSchedule({...newSchedule, is_weekend: e.target.checked})}
+                    />
+                    <label htmlFor="is_weekend" className="ml-2 block text-sm text-gray-900">
+                      Weekend Class
+                    </label>
                   </div>
                 </div>
                 <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all mt-4">

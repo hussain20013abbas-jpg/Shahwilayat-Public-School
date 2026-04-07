@@ -21,6 +21,9 @@ db.exec(`
     section TEXT NOT NULL,
     parent_contact TEXT,
     parent_email TEXT,
+    emergency_contact TEXT,
+    academic_notes TEXT,
+    medical_notes TEXT,
     photo_url TEXT,
     cnic TEXT NOT NULL,
     computer_number TEXT,
@@ -102,7 +105,9 @@ db.exec(`
     day TEXT NOT NULL,
     time_slot TEXT NOT NULL,
     subject TEXT NOT NULL,
-    teacher TEXT NOT NULL
+    teacher TEXT NOT NULL,
+    location TEXT,
+    is_weekend BOOLEAN DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS online_classes (
@@ -205,9 +210,36 @@ try {
       console.error("Error adding photo_url column:", e);
     }
   }
+
+  if (!columns.includes('emergency_contact')) {
+    try {
+      db.exec("ALTER TABLE students ADD COLUMN emergency_contact TEXT DEFAULT ''");
+    } catch (e) {}
+  }
+  if (!columns.includes('academic_notes')) {
+    try {
+      db.exec("ALTER TABLE students ADD COLUMN academic_notes TEXT DEFAULT ''");
+    } catch (e) {}
+  }
+  if (!columns.includes('medical_notes')) {
+    try {
+      db.exec("ALTER TABLE students ADD COLUMN medical_notes TEXT DEFAULT ''");
+    } catch (e) {}
+  }
 } catch (err) {
   console.error("Migration error:", err);
 }
+
+try {
+  const scheduleInfo = db.prepare("PRAGMA table_info(schedules)").all();
+  const scheduleCols = (scheduleInfo as any[]).map((c: any) => c.name);
+  if (!scheduleCols.includes('location')) {
+    db.exec("ALTER TABLE schedules ADD COLUMN location TEXT DEFAULT ''");
+  }
+  if (!scheduleCols.includes('is_weekend')) {
+    db.exec("ALTER TABLE schedules ADD COLUMN is_weekend BOOLEAN DEFAULT 0");
+  }
+} catch (err) {}
 
 async function startServer() {
   const app = express();
@@ -385,9 +417,9 @@ async function startServer() {
   });
 
   app.post("/api/students", (req, res) => {
-    const { name, roll_no, grade, class: className, section, parent_contact, parent_email, photo_url, cnic, computer_number, password } = req.body;
+    const { name, roll_no, grade, class: className, section, parent_contact, parent_email, emergency_contact, academic_notes, medical_notes, photo_url, cnic, computer_number, password } = req.body;
     try {
-      const info = db.prepare("INSERT INTO students (name, roll_no, grade, class, section, parent_contact, parent_email, photo_url, cnic, computer_number, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(name, roll_no, grade, className, section, parent_contact, parent_email, photo_url, cnic, computer_number, password || 'password123');
+      const info = db.prepare("INSERT INTO students (name, roll_no, grade, class, section, parent_contact, parent_email, emergency_contact, academic_notes, medical_notes, photo_url, cnic, computer_number, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(name, roll_no, grade, className, section, parent_contact, parent_email, emergency_contact, academic_notes, medical_notes, photo_url, cnic, computer_number, password || 'password123');
       res.json({ id: info.lastInsertRowid });
     } catch (err) {
       res.status(400).json({ error: "Roll number already exists" });
@@ -608,8 +640,8 @@ async function startServer() {
 
   app.post("/api/schedules", (req, res) => {
     try {
-      const { grade, day, time_slot, subject, teacher } = req.body;
-      db.prepare("INSERT INTO schedules (grade, day, time_slot, subject, teacher) VALUES (?, ?, ?, ?, ?)").run(grade, day, time_slot, subject, teacher);
+      const { grade, day, time_slot, subject, teacher, location, is_weekend } = req.body;
+      db.prepare("INSERT INTO schedules (grade, day, time_slot, subject, teacher, location, is_weekend) VALUES (?, ?, ?, ?, ?, ?, ?)").run(grade, day, time_slot, subject, teacher, location || '', is_weekend ? 1 : 0);
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });

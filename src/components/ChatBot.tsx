@@ -20,6 +20,7 @@ export const ChatBot: React.FC<ChatBotProps> = ({ studentData, userType }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatSessionRef = useRef<any>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -29,8 +30,39 @@ export const ChatBot: React.FC<ChatBotProps> = ({ studentData, userType }) => {
     scrollToBottom();
   }, [messages]);
 
+  useEffect(() => {
+    // Initialize chat session when component mounts or user data changes
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+    const systemInstruction = `
+      You are the Shahwilayat Public School AI Assistant. 
+      Your goal is to help students, parents, and staff with their queries.
+      
+      Context:
+      - Current User Type: ${userType || 'Guest'}
+      ${studentData ? `- Logged in Student: ${studentData.name} (Roll No: ${studentData.roll_no})` : ''}
+      ${studentData ? `- Current Balance: Rs. ${studentData.balance}` : ''}
+      ${studentData ? `- Attendance: ${studentData.attendance_percentage}%` : ''}
+      ${studentData ? `- Grade: ${studentData.grade}, Class: ${studentData.class}, Section: ${studentData.section}` : ''}
+      
+      Guidelines:
+      - Be professional, helpful, and polite.
+      - If asked about balance or attendance, use the provided context.
+      - If asked about school policies, provide general helpful information.
+      - If you don't know something, suggest contacting the school administration.
+      - Keep responses concise and clear.
+      - Remember previous parts of this conversation.
+    `;
+
+    chatSessionRef.current = ai.chats.create({
+      model: "gemini-3-flash-preview",
+      config: {
+        systemInstruction: systemInstruction,
+      }
+    });
+  }, [userType, studentData]);
+
   const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || !chatSessionRef.current) return;
 
     const userMessage = input.trim();
     setInput('');
@@ -38,34 +70,7 @@ export const ChatBot: React.FC<ChatBotProps> = ({ studentData, userType }) => {
     setIsLoading(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-      
-      const systemInstruction = `
-        You are the Shahwilayat Public School AI Assistant. 
-        Your goal is to help students, parents, and staff with their queries.
-        
-        Context:
-        - Current User Type: ${userType || 'Guest'}
-        ${studentData ? `- Logged in Student: ${studentData.name} (Roll No: ${studentData.roll_no})` : ''}
-        ${studentData ? `- Current Balance: Rs. ${studentData.balance}` : ''}
-        ${studentData ? `- Attendance: ${studentData.attendance_percentage}%` : ''}
-        ${studentData ? `- Grade: ${studentData.grade}, Class: ${studentData.class}, Section: ${studentData.section}` : ''}
-        
-        Guidelines:
-        - Be professional, helpful, and polite.
-        - If asked about balance or attendance, use the provided context.
-        - If asked about school policies, provide general helpful information.
-        - If you don't know something, suggest contacting the school administration.
-        - Keep responses concise and clear.
-      `;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [
-          { role: 'user', parts: [{ text: `System Instruction: ${systemInstruction}\n\nUser: ${userMessage}` }] }
-        ],
-      });
-
+      const response = await chatSessionRef.current.sendMessage({ message: userMessage });
       const aiText = response.text || "I'm sorry, I couldn't process that request.";
       setMessages(prev => [...prev, { role: 'model', text: aiText }]);
     } catch (error) {

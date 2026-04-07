@@ -1,21 +1,31 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #004a99;
-  --color-secondary: #ffcc00;
-  --color-accent: #003366;
+  --color-primary: #6366f1; /* Indigo 500 */
+  --color-secondary: #f43f5e; /* Rose 500 */
+  --color-accent: #8b5cf6; /* Violet 500 */
+  --color-success: #10b981; /* Emerald 500 */
+  --color-warning: #f59e0b; /* Amber 500 */
+  --color-info: #0ea5e9; /* Sky 500 */
 }
 
 @layer base {
   body {
-    @apply bg-gray-50 text-gray-900;
+    @apply text-slate-900;
+    background-color: #f8fafc;
+    background-image: 
+      radial-gradient(at 0% 0%, hsla(253,100%,92%,1) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, hsla(339,100%,92%,1) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, hsla(189,100%,92%,1) 0px, transparent 50%),
+      radial-gradient(at 0% 100%, hsla(119,100%,92%,1) 0px, transparent 50%);
+    background-attachment: fixed;
   }
 }
 
 .btn-primary {
-  @apply bg-primary text-white px-6 py-2 rounded-xl font-bold hover:bg-accent transition-all shadow-lg shadow-primary/20;
+  @apply bg-gradient-to-r from-primary to-accent text-white px-6 py-2 rounded-xl font-bold hover:opacity-90 transition-all shadow-lg shadow-primary/30;
 }
 
 .card {
-  @apply bg-white rounded-2xl border border-gray-100 shadow-sm p-6;
+  @apply bg-white rounded-3xl border border-slate-100 shadow-xl shadow-slate-200/50 p-6;
 }
