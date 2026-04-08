@@ -23,6 +23,7 @@ import {
   Menu,
   ChevronLeft,
   LogOut,
+  LogIn,
   Lock,
   User as UserIcon,
   Home,
@@ -73,6 +74,7 @@ import {
 import { ChatBot } from './components/ChatBot';
 import { VoiceChat } from './components/VoiceChat';
 import { QRScanner } from './components/QRScanner';
+import { Logo } from './components/Logo';
 
 const BASE_URL = process.env.APP_URL || '';
 
@@ -83,9 +85,9 @@ const LoadingSpinner = () => (
 );
 
 const ShahwilayatApp = () => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'students' | 'finance' | 'canteen' | 'news' | 'syllabus' | 'schedules' | 'online' | 'attendance' | 'homework' | 'datesheets' | 'results' | 'about' | 'admins' | 'profile' | 'ai'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'students' | 'finance' | 'canteen' | 'news' | 'syllabus' | 'schedules' | 'online' | 'attendance' | 'homework' | 'datesheets' | 'results' | 'about' | 'admins' | 'profile' | 'ai' | 'events'>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>({ id: 0, name: 'Public', role: 'guest' });
   const [loginForm, setLoginForm] = useState({ username: '', password: '', email: '' });
   const [loginError, setLoginError] = useState('');
   const [multipleProfiles, setMultipleProfiles] = useState<any[] | null>(null);
@@ -181,11 +183,32 @@ const ShahwilayatApp = () => {
     if (savedUser) {
       const parsedUser = JSON.parse(savedUser);
       setUser(parsedUser);
-      if (parsedUser.role === 'student') {
+      if (parsedUser.role === 'student' && !window.location.hash) {
         setActiveTab('dashboard');
       }
     }
+    
+    const hash = window.location.hash.replace('#', '');
+    if (hash) {
+      setActiveTab(hash as any);
+    }
+    
+    const handleHashChange = () => {
+      const newHash = window.location.hash.replace('#', '');
+      if (newHash) {
+        setActiveTab(newHash as any);
+      }
+    };
+    
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
+
+  useEffect(() => {
+    if (activeTab) {
+      window.history.replaceState(null, '', `#${activeTab}`);
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     if (user) {
@@ -802,15 +825,7 @@ const ShahwilayatApp = () => {
           <div className="bg-white p-8 rounded-3xl shadow-xl border border-gray-100 mb-8">
             <div className="text-center mb-8">
               <div className="bg-white p-4 rounded-2xl shadow-sm inline-block mb-6 border border-gray-100">
-                <img 
-                  src="https://shahwilayat.edu.pk/wp-content/uploads/2021/08/logo-shahwilayat.png" 
-                  alt="SWPS Logo" 
-                  className="w-24 h-24 object-contain"
-                  referrerPolicy="no-referrer"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = "https://picsum.photos/seed/school/100/100";
-                  }}
-                />
+                <Logo className="w-24 h-24" />
               </div>
               <h1 className="text-3xl font-black text-gray-900 tracking-tight">Shahwilayat Public School</h1>
               <p className="bg-secondary text-primary px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-[0.2em] inline-block mt-2 shadow-sm">Excellence in Education</p>
@@ -909,6 +924,13 @@ const ShahwilayatApp = () => {
                   <button type="submit" className="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-accent transition-all shadow-lg shadow-primary/20 mt-2">
                     Sign In
                   </button>
+                  <button 
+                    type="button" 
+                    onClick={() => setUser({ id: 0, name: 'Public', role: 'guest' })}
+                    className="w-full bg-slate-100 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-200 transition-all mt-3 border border-slate-200"
+                  >
+                    Back to Website
+                  </button>
                 </form>
               </>
             )}
@@ -981,7 +1003,7 @@ const ShahwilayatApp = () => {
             </div>
             <h4 className="font-bold text-gray-900 mb-2">Location</h4>
             <p className="text-sm text-gray-500 leading-relaxed">
-              Block 13, Gulistan-e-Jauhar, Karachi, Pakistan. <br />
+              Block 13, Federal B Area, Karachi, Pakistan. <br />
               Our campus is equipped with modern facilities and a secure environment for all students.
             </p>
           </motion.div>
@@ -1027,15 +1049,7 @@ const ShahwilayatApp = () => {
       >
         <div className="p-6 flex items-center gap-3">
           <div className="bg-white p-1 rounded-lg shadow-sm">
-            <img 
-              src="https://shahwilayat.edu.pk/wp-content/uploads/2021/08/logo-shahwilayat.png" 
-              alt="SWPS Logo" 
-              className="w-8 h-8 object-contain"
-              referrerPolicy="no-referrer"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = "https://picsum.photos/seed/school/100/100";
-              }}
-            />
+            <Logo className="w-8 h-8" />
           </div>
           <div className={`flex flex-col ${!isSidebarOpen && 'hidden'}`}>
             <h1 className="font-bold text-gray-900 leading-tight">Shahwilayat Public School</h1>
@@ -1052,21 +1066,22 @@ const ShahwilayatApp = () => {
 
         <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
           {[
-            { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'student', 'canteen'] },
+            { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'student', 'canteen', 'guest'] },
+            { id: 'events', icon: Calendar, label: 'Events', roles: ['admin', 'student', 'canteen', 'guest'] },
             { id: 'students', icon: Users, label: 'Students', roles: ['admin', 'canteen'] },
             { id: 'finance', icon: Wallet, label: user.role === 'student' ? 'My Wallet' : 'Finance', roles: ['admin', 'canteen', 'student'] },
             { id: 'canteen', icon: Coffee, label: 'Canteen', roles: ['admin', 'canteen'] },
             { id: 'admins', icon: Settings, label: 'Manage Admins', roles: ['admin'] },
-            { id: 'news', icon: Megaphone, label: 'News Feed', roles: ['admin', 'student', 'canteen'] },
+            { id: 'news', icon: Megaphone, label: 'News Feed', roles: ['admin', 'student', 'canteen', 'guest'] },
             { id: 'attendance', icon: FileCheck, label: 'Attendance', roles: ['admin', 'student'] },
             { id: 'homework', icon: ClipboardList, label: 'Homework', roles: ['admin', 'student'] },
-            { id: 'datesheets', icon: CalendarDays, label: 'Datesheets', roles: ['admin', 'student'] },
+            { id: 'datesheets', icon: CalendarDays, label: 'Datesheets', roles: ['admin', 'student', 'guest'] },
             { id: 'results', icon: Award, label: 'Results', roles: ['admin', 'student'] },
-            { id: 'syllabus', icon: BookOpen, label: 'Syllabus', roles: ['admin', 'student'] },
-            { id: 'schedules', icon: Calendar, label: 'Schedules', roles: ['admin', 'student'] },
+            { id: 'syllabus', icon: BookOpen, label: 'Syllabus', roles: ['admin', 'student', 'guest'] },
+            { id: 'schedules', icon: Clock, label: 'Schedules', roles: ['admin', 'student', 'guest'] },
             { id: 'online', icon: Video, label: 'Online Classes', roles: ['admin', 'student'] },
-            { id: 'ai', icon: Bot, label: 'AI Assistant', roles: ['admin', 'student', 'canteen'] },
-            { id: 'about', icon: Info, label: 'About Us', roles: ['admin', 'student', 'canteen'] },
+            { id: 'ai', icon: Bot, label: 'AI Assistant', roles: ['admin', 'student', 'canteen', 'guest'] },
+            { id: 'about', icon: Info, label: 'About Us', roles: ['admin', 'student', 'canteen', 'guest'] },
             { id: 'scan', icon: QrCode, label: 'Scan QR Code', onClick: () => setShowQRScanner(true), roles: ['admin', 'student', 'canteen'] },
           ].filter(item => item.roles.includes(user.role)).map((item: any) => (
             <button 
@@ -1084,10 +1099,10 @@ const ShahwilayatApp = () => {
         <div className="p-4 border-t border-gray-100">
           <button 
             onClick={handleLogout}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-500 hover:bg-red-50 transition-all ${!isSidebarOpen && 'justify-center px-0'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl ${user.role === 'guest' ? 'text-indigo-600 hover:bg-indigo-50' : 'text-red-500 hover:bg-red-50'} transition-all ${!isSidebarOpen && 'justify-center px-0'}`}
           >
-            <LogOut size={20} />
-            {isSidebarOpen && 'Sign Out'}
+            {user.role === 'guest' ? <LogIn size={20} /> : <LogOut size={20} />}
+            {isSidebarOpen && (user.role === 'guest' ? 'Sign In' : 'Sign Out')}
           </button>
         </div>
       </motion.aside>
@@ -1447,151 +1462,258 @@ const ShahwilayatApp = () => {
               ) : (
                 <>
                   {user.role === 'admin' && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="bg-gradient-to-r from-indigo-50 to-blue-50 p-6 rounded-3xl border border-indigo-100 shadow-sm mb-8 flex flex-col md:flex-row items-center justify-between gap-4"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm">
-                          <Globe size={24} />
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-bold text-gray-900">Share School Portal</h3>
-                          <p className="text-sm text-gray-600">Share this link with students and staff to give them access.</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-indigo-100 shadow-sm w-full md:w-auto flex-1 max-w-md">
-                        <input 
-                          type="text" 
-                          readOnly 
-                          value={window.location.href} 
-                          className="bg-transparent text-sm text-gray-600 w-full outline-none px-2 font-mono truncate"
-                        />
-                        <button 
-                          onClick={() => {
-                            navigator.clipboard.writeText(window.location.href);
-                            showToast('Link copied to clipboard!');
-                          }}
-                          className="p-2 bg-indigo-50 rounded-lg text-indigo-600 hover:bg-indigo-100 transition-colors flex-shrink-0"
-                          title="Copy Link"
-                        >
-                          <Copy size={18} />
-                        </button>
-                        <a 
-                          href={window.location.href} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex-shrink-0"
-                          title="Open in new tab"
-                        >
-                          <ExternalLink size={18} />
-                        </a>
-                      </div>
-                    </motion.div>
-                  )}
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {[
-                      { label: 'Total Students', value: stats.totalStudents, icon: Users, color: 'bg-blue-50 text-blue-600' },
-                      { label: 'Total Balance', value: `Rs. ${stats.totalBalance?.toLocaleString() ?? '0'}`, icon: Wallet, color: 'bg-emerald-50 text-emerald-600' },
-                      { label: 'Pending Fees', value: 'Rs. 45,000', icon: History, color: 'bg-red-50 text-red-600' },
-                      { label: 'News Items', value: announcements.length, icon: Megaphone, color: 'bg-purple-50 text-purple-600' },
-                    ].map((stat, i) => (
+                    <>
                       <motion.div 
-                        key={stat.label}
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: i * 0.1 }}
-                        className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm"
+                        className="bg-gradient-to-r from-indigo-50 to-blue-50 p-6 rounded-3xl border border-indigo-100 shadow-sm mb-8 flex flex-col md:flex-row items-center justify-between gap-4"
                       >
-                        <div className="flex justify-between items-start mb-4">
-                          <div className={`p-3 rounded-xl ${stat.color}`}>
-                            <stat.icon size={24} />
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm">
+                            <Globe size={24} />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-bold text-gray-900">Share School Portal</h3>
+                            <p className="text-sm text-gray-600">Share this link with students and staff to give them access.</p>
                           </div>
                         </div>
-                        <p className="text-gray-500 text-sm font-medium">{stat.label}</p>
-                        <h3 className="text-2xl font-bold text-gray-900 mt-1">{stat.value}</h3>
+                        <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-indigo-100 shadow-sm w-full md:w-auto flex-1 max-w-md">
+                          <input 
+                            type="text" 
+                            readOnly 
+                            value={window.location.href} 
+                            className="bg-transparent text-sm text-gray-600 w-full outline-none px-2 font-mono truncate"
+                          />
+                          <button 
+                            onClick={() => {
+                              navigator.clipboard.writeText(window.location.href);
+                              showToast('Link copied to clipboard!');
+                            }}
+                            className="p-2 bg-indigo-50 rounded-lg text-indigo-600 hover:bg-indigo-100 transition-colors flex-shrink-0"
+                            title="Copy Link"
+                          >
+                            <Copy size={18} />
+                          </button>
+                          <a 
+                            href={window.location.href} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex-shrink-0"
+                            title="Open in new tab"
+                          >
+                            <ExternalLink size={18} />
+                          </a>
+                        </div>
                       </motion.div>
-                    ))}
-                  </div>
-
-                  <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
-                    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                      <div className="flex justify-between items-center mb-6">
-                        <h3 className="font-bold text-gray-900">Recent Transactions</h3>
-                        <button onClick={() => setActiveTab('finance')} className="text-indigo-600 text-xs font-bold hover:underline">View All</button>
-                      </div>
-                      <div className="space-y-4">
-                        {stats.recentTransactions.slice(0, 5).map((tx) => (
-                          <div key={`${tx.id}-${tx.date}`} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                            <div className="flex items-center gap-3">
-                              <div className={`p-2 rounded-lg ${tx.type === 'credit' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
-                                {tx.type === 'credit' ? <ArrowUpRight size={16} /> : <ArrowDownLeft size={16} />}
-                              </div>
-                              <div>
-                                <p className="text-sm font-medium text-gray-900">{tx.student_name}</p>
-                                <p className="text-xs text-gray-500">{new Date(tx.date).toLocaleDateString()}</p>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                        {[
+                          { label: 'Total Students', value: stats.totalStudents, icon: Users, color: 'bg-blue-50 text-blue-600' },
+                          { label: 'Total Balance', value: `Rs. ${stats.totalBalance?.toLocaleString() ?? '0'}`, icon: Wallet, color: 'bg-emerald-50 text-emerald-600' },
+                          { label: 'Pending Fees', value: 'Rs. 45,000', icon: History, color: 'bg-red-50 text-red-600' },
+                          { label: 'News Items', value: announcements.length, icon: Megaphone, color: 'bg-purple-50 text-purple-600' },
+                        ].map((stat, i) => (
+                          <motion.div 
+                            key={stat.label}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: i * 0.1 }}
+                            className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm"
+                          >
+                            <div className="flex justify-between items-start mb-4">
+                              <div className={`p-3 rounded-xl ${stat.color}`}>
+                                <stat.icon size={24} />
                               </div>
                             </div>
-                            <span className={`font-bold text-sm ${tx.type === 'credit' ? 'text-emerald-600' : 'text-red-600'}`}>
-                              {tx.type === 'credit' ? '+' : '-'} Rs. {tx.amount?.toLocaleString() ?? '0'}
-                            </span>
-                          </div>
+                            <p className="text-gray-500 text-sm font-medium">{stat.label}</p>
+                            <h3 className="text-2xl font-bold text-gray-900 mt-1">{stat.value}</h3>
+                          </motion.div>
                         ))}
-                        {stats.recentTransactions.length === 0 && <p className="text-center text-gray-400 py-4">No recent transactions</p>}
+                      </div>
+
+                      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
+                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                          <div className="flex justify-between items-center mb-6">
+                            <h3 className="font-bold text-gray-900">Recent Transactions</h3>
+                            <button onClick={() => setActiveTab('finance')} className="text-indigo-600 text-xs font-bold hover:underline">View All</button>
+                          </div>
+                          <div className="space-y-4">
+                            {stats.recentTransactions.slice(0, 5).map((tx) => (
+                              <div key={`${tx.id}-${tx.date}`} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                                <div className="flex items-center gap-3">
+                                  <div className={`p-2 rounded-lg ${tx.type === 'credit' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
+                                    {tx.type === 'credit' ? <ArrowUpRight size={16} /> : <ArrowDownLeft size={16} />}
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium text-gray-900">{tx.student_name}</p>
+                                    <p className="text-xs text-gray-500">{new Date(tx.date).toLocaleDateString()}</p>
+                                  </div>
+                                </div>
+                                <span className={`font-bold text-sm ${tx.type === 'credit' ? 'text-emerald-600' : 'text-red-600'}`}>
+                                  {tx.type === 'credit' ? '+' : '-'} Rs. {tx.amount?.toLocaleString() ?? '0'}
+                                </span>
+                              </div>
+                            ))}
+                            {stats.recentTransactions.length === 0 && <p className="text-center text-gray-400 py-4">No recent transactions</p>}
+                          </div>
+                        </div>
+
+                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                          <div className="flex justify-between items-center mb-6">
+                            <h3 className="font-bold text-gray-900">Upcoming Classes</h3>
+                            <button onClick={() => setActiveTab('online')} className="text-primary text-xs font-bold hover:underline">View All</button>
+                          </div>
+                          <div className="space-y-4">
+                            {onlineClasses.slice(0, 5).map((oc) => (
+                              <div key={oc.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                                <div className="flex items-center gap-3">
+                                  <div className="p-2 bg-primary/20 text-primary rounded-lg">
+                                    <Video size={16} />
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium text-gray-900">{oc.subject}</p>
+                                    <p className="text-xs text-gray-500">Grade {oc.grade} • {new Date(oc.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                  </div>
+                                </div>
+                                <a href={oc.link} target="_blank" rel="noopener noreferrer" className="text-primary text-xs font-bold hover:underline">JOIN</a>
+                              </div>
+                            ))}
+                            {onlineClasses.length === 0 && <p className="text-center text-gray-400 py-4">No classes scheduled</p>}
+                          </div>
+                        </div>
+
+                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                          <div className="flex justify-between items-center mb-6">
+                            <h3 className="font-bold text-gray-900">Latest News</h3>
+                            <button onClick={() => setActiveTab('news')} className="text-primary text-xs font-bold hover:underline">Read Feed</button>
+                          </div>
+                          <div className="space-y-4">
+                            {announcements.slice(0, 5).map((ann) => (
+                              <div key={ann.id} className="flex items-start gap-3 p-4 bg-gray-50 rounded-xl group cursor-pointer hover:bg-white hover:shadow-sm transition-all" onClick={() => setActiveTab('news')}>
+                                <div className={`p-2 rounded-lg shrink-0 ${
+                                  ann.category === 'Events' ? 'bg-purple-100 text-purple-600' :
+                                  ann.category === 'Academics' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'
+                                }`}>
+                                  <Megaphone size={16} />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-bold text-gray-900 truncate group-hover:text-primary transition-colors">{ann.title}</p>
+                                  <p className="text-xs text-gray-500 line-clamp-1">{ann.content}</p>
+                                  <p className="text-[10px] text-gray-400 mt-1">{new Date(ann.date).toLocaleDateString()}</p>
+                                </div>
+                              </div>
+                            ))}
+                            {announcements.length === 0 && <p className="text-center text-gray-400 py-4">No news items posted</p>}
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                  {user.role === 'canteen' && (
+                    <div className="space-y-8">
+                      <motion.div 
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-gradient-to-r from-orange-500 to-amber-500 p-8 rounded-[3rem] text-white shadow-2xl shadow-orange-500/20 relative overflow-hidden"
+                      >
+                        <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full -mr-40 -mt-40 blur-3xl" />
+                        <div className="absolute bottom-0 left-0 w-64 h-64 bg-amber-400/20 rounded-full -ml-32 -mb-32 blur-2xl" />
+                        
+                        <div className="relative z-10">
+                          <h2 className="text-4xl font-black tracking-tight mb-4">Canteen Dashboard</h2>
+                          <p className="text-orange-100 text-lg max-w-2xl leading-relaxed mb-8">
+                            Manage canteen inventory, process student payments, and view daily sales.
+                          </p>
+                          
+                          <div className="flex flex-wrap gap-4">
+                            <button onClick={() => setActiveTab('canteen')} className="bg-white text-orange-600 px-6 py-3 rounded-xl font-bold hover:bg-orange-50 transition-colors shadow-lg">
+                              Open Canteen POS
+                            </button>
+                            <button onClick={() => setShowQRScanner(true)} className="bg-white/20 text-white px-6 py-3 rounded-xl font-bold hover:bg-white/30 transition-colors backdrop-blur-md border border-white/20">
+                              Scan QR Code
+                            </button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    </div>
+                  )}
+                  {user.role === 'guest' && (
+                    <div className="space-y-8">
+                      <motion.div 
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-gradient-to-r from-primary to-accent p-8 rounded-[3rem] text-white shadow-2xl shadow-primary/20 relative overflow-hidden"
+                      >
+                        <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full -mr-40 -mt-40 blur-3xl" />
+                        <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-400/20 rounded-full -ml-32 -mb-32 blur-2xl" />
+                        
+                        <div className="relative z-10">
+                          <h2 className="text-4xl font-black tracking-tight mb-4">Welcome to Shahwilayat Public School</h2>
+                          <p className="text-indigo-100 text-lg max-w-2xl leading-relaxed mb-8">
+                            Explore our public portal to stay updated with the latest news, upcoming events, and learn more about our institution.
+                          </p>
+                          
+                          <div className="flex flex-wrap gap-4">
+                            <button onClick={() => setActiveTab('events')} className="bg-white text-primary px-6 py-3 rounded-xl font-bold hover:bg-indigo-50 transition-colors shadow-lg">
+                              View Events
+                            </button>
+                            <button onClick={() => setActiveTab('news')} className="bg-white/20 text-white px-6 py-3 rounded-xl font-bold hover:bg-white/30 transition-colors backdrop-blur-md border border-white/20">
+                              Read News
+                            </button>
+                            <button onClick={() => setActiveTab('schedules')} className="bg-white/20 text-white px-6 py-3 rounded-xl font-bold hover:bg-white/30 transition-colors backdrop-blur-md border border-white/20">
+                              Class Schedules
+                            </button>
+                            <button onClick={() => setActiveTab('datesheets')} className="bg-white/20 text-white px-6 py-3 rounded-xl font-bold hover:bg-white/30 transition-colors backdrop-blur-md border border-white/20">
+                              Exam Datesheets
+                            </button>
+                          </div>
+                        </div>
+                      </motion.div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
+                          <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-6">
+                            <Megaphone size={32} />
+                          </div>
+                          <h3 className="text-2xl font-bold text-gray-900 mb-4">Latest Announcements</h3>
+                          <div className="space-y-4">
+                            {announcements.slice(0, 3).map((ann) => (
+                              <div key={ann.id} className="p-4 bg-gray-50 rounded-xl">
+                                <p className="text-sm font-bold text-gray-900">{ann.title}</p>
+                                <p className="text-xs text-gray-500 mt-1 line-clamp-2">{ann.content}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
+                          <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mb-6">
+                            <Globe size={32} />
+                          </div>
+                          <h3 className="text-2xl font-bold text-gray-900 mb-4">Share Portal</h3>
+                          <p className="text-gray-600 mb-6">Share this portal with other parents, students, or staff members.</p>
+                          <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-xl border border-gray-200">
+                            <input 
+                              type="text" 
+                              readOnly 
+                              value={window.location.href} 
+                              className="bg-transparent text-sm text-gray-600 w-full outline-none px-2 font-mono truncate"
+                            />
+                            <button 
+                              onClick={() => {
+                                navigator.clipboard.writeText(window.location.href);
+                                showToast('Link copied to clipboard!');
+                              }}
+                              className="p-2 bg-white rounded-lg text-primary hover:bg-indigo-50 transition-colors shadow-sm border border-gray-100"
+                              title="Copy Link"
+                            >
+                              <Copy size={18} />
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
-
-                    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                      <div className="flex justify-between items-center mb-6">
-                        <h3 className="font-bold text-gray-900">Upcoming Classes</h3>
-                        <button onClick={() => setActiveTab('online')} className="text-primary text-xs font-bold hover:underline">View All</button>
-                      </div>
-                      <div className="space-y-4">
-                        {onlineClasses.slice(0, 5).map((oc) => (
-                          <div key={oc.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                            <div className="flex items-center gap-3">
-                              <div className="p-2 bg-primary/20 text-primary rounded-lg">
-                                <Video size={16} />
-                              </div>
-                              <div>
-                                <p className="text-sm font-medium text-gray-900">{oc.subject}</p>
-                                <p className="text-xs text-gray-500">Grade {oc.grade} • {new Date(oc.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                              </div>
-                            </div>
-                            <a href={oc.link} target="_blank" rel="noopener noreferrer" className="text-primary text-xs font-bold hover:underline">JOIN</a>
-                          </div>
-                        ))}
-                        {onlineClasses.length === 0 && <p className="text-center text-gray-400 py-4">No classes scheduled</p>}
-                      </div>
-                    </div>
-
-                    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                      <div className="flex justify-between items-center mb-6">
-                        <h3 className="font-bold text-gray-900">Latest News</h3>
-                        <button onClick={() => setActiveTab('news')} className="text-primary text-xs font-bold hover:underline">Read Feed</button>
-                      </div>
-                      <div className="space-y-4">
-                        {announcements.slice(0, 5).map((ann) => (
-                          <div key={ann.id} className="flex items-start gap-3 p-4 bg-gray-50 rounded-xl group cursor-pointer hover:bg-white hover:shadow-sm transition-all" onClick={() => setActiveTab('news')}>
-                            <div className={`p-2 rounded-lg shrink-0 ${
-                              ann.category === 'Events' ? 'bg-purple-100 text-purple-600' :
-                              ann.category === 'Academics' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'
-                            }`}>
-                              <Megaphone size={16} />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-sm font-bold text-gray-900 truncate group-hover:text-primary transition-colors">{ann.title}</p>
-                              <p className="text-xs text-gray-500 line-clamp-1">{ann.content}</p>
-                              <p className="text-[10px] text-gray-400 mt-1">{new Date(ann.date).toLocaleDateString()}</p>
-                            </div>
-                          </div>
-                        ))}
-                        {announcements.length === 0 && <p className="text-center text-gray-400 py-4">No news items posted</p>}
-                      </div>
-                    </div>
-                  </div>
+                  )}
                 </>
               )}
             </div>
@@ -2416,7 +2538,7 @@ const ShahwilayatApp = () => {
                 </div>
                 <h4 className="font-bold text-gray-900 mb-2 text-xl">Our Location</h4>
                 <p className="text-gray-500 leading-relaxed">
-                  Block 13, Gulistan-e-Jauhar, Karachi, Pakistan. <br />
+                  Block 13, Federal B Area, Karachi, Pakistan. <br />
                   Our campus is equipped with modern facilities and a secure environment for all students.
                 </p>
               </div>
@@ -2459,6 +2581,66 @@ const ShahwilayatApp = () => {
                   <p className="text-sm text-indigo-100">Use your Computer Number and Password to access your personal wallet.</p>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'events' && (
+          <div className="space-y-8">
+            <div className="flex justify-between items-center bg-gradient-to-r from-primary to-accent p-8 rounded-3xl text-white shadow-xl shadow-primary/20">
+              <div>
+                <h2 className="text-3xl font-black tracking-tight mb-2">Upcoming Events</h2>
+                <p className="text-indigo-100 font-medium">Stay updated with school activities and important dates</p>
+              </div>
+              <div className="bg-white/20 p-4 rounded-2xl backdrop-blur-xl border border-white/20">
+                <Calendar size={32} className="text-white" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[
+                { id: 1, title: 'Annual Science Fair', date: '2026-04-15', time: '09:00 AM', location: 'Main Auditorium', description: 'Students showcase their innovative science projects.', category: 'academic', color: 'bg-blue-50 border-blue-200 text-blue-700', icon: BookOpen },
+                { id: 2, title: 'Sports Day 2026', date: '2026-04-22', time: '08:00 AM', location: 'School Ground', description: 'Annual sports competition featuring various athletic events.', category: 'extracurricular', color: 'bg-emerald-50 border-emerald-200 text-emerald-700', icon: Award },
+                { id: 3, title: 'Parent-Teacher Meeting', date: '2026-04-28', time: '02:00 PM', location: 'Respective Classrooms', description: 'Discussing student progress and academic performance.', category: 'administrative', color: 'bg-purple-50 border-purple-200 text-purple-700', icon: Users },
+                { id: 4, title: 'Eid-ul-Fitr Holidays', date: '2026-05-01', time: 'All Day', location: 'School Wide', description: 'School will remain closed for Eid celebrations.', category: 'holiday', color: 'bg-rose-50 border-rose-200 text-rose-700', icon: CalendarDays },
+                { id: 5, title: 'Art Exhibition', date: '2026-05-10', time: '10:00 AM', location: 'Art Gallery', description: 'Displaying creative artworks by our talented students.', category: 'extracurricular', color: 'bg-amber-50 border-amber-200 text-amber-700', icon: LayoutDashboard },
+              ].map(event => (
+                <motion.div 
+                  key={event.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  whileHover={{ y: -5 }}
+                  className={`p-6 rounded-3xl border-2 shadow-sm ${event.color} relative overflow-hidden group`}
+                >
+                  <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <event.icon size={80} />
+                  </div>
+                  <div className="relative z-10">
+                    <div className="flex items-center gap-2 mb-4">
+                      <span className="px-3 py-1 bg-white/60 backdrop-blur-sm rounded-full text-xs font-bold uppercase tracking-wider">
+                        {event.category}
+                      </span>
+                    </div>
+                    <h3 className="text-xl font-black mb-2 leading-tight">{event.title}</h3>
+                    <p className="text-sm opacity-80 mb-6 line-clamp-2">{event.description}</p>
+                    
+                    <div className="space-y-2 text-sm font-medium">
+                      <div className="flex items-center gap-2">
+                        <Calendar size={16} />
+                        <span>{new Date(event.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Clock size={16} />
+                        <span>{event.time}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <MapPin size={16} />
+                        <span>{event.location}</span>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
             </div>
           </div>
         )}

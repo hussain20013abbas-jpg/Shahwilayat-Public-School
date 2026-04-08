@@ -24,7 +24,7 @@ export interface Student {
 export interface User {
   id: number;
   name: string;
-  role: 'admin' | 'student' | 'canteen';
+  role: 'admin' | 'student' | 'canteen' | 'guest';
   student_id?: number;
   computer_number?: string;
 }
@@ -92,6 +92,16 @@ export interface OnlineClass {
   subject: string;
   link: string;
   time: string;
+}
+
+export interface Event {
+  id: number;
+  title: string;
+  date: string;
+  time: string;
+  location: string;
+  description: string;
+  category: 'academic' | 'extracurricular' | 'administrative' | 'holiday' | 'other';
 }
 
 export interface HomeworkClasswork {
