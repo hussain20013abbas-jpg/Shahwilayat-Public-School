@@ -3272,8 +3272,33 @@ const ShahwilayatApp = () => {
                       <p className="text-gray-500 text-xs font-bold uppercase tracking-wider mb-1">Parent Email</p>
                       <p className="text-gray-900 font-medium">{selectedStudent.parent_email || 'Not provided'}</p>
                     </div>
+                    <div>
+                      <p className="text-gray-500 text-xs font-bold uppercase tracking-wider mb-1">Emergency Contact</p>
+                      <p className="text-gray-900 font-medium">{selectedStudent.emergency_contact || 'Not provided'}</p>
+                    </div>
                   </div>
                 </div>
+
+                {(selectedStudent.academic_notes || selectedStudent.medical_notes) && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {selectedStudent.academic_notes && (
+                      <div className="bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100/50">
+                        <h5 className="font-bold text-indigo-900 mb-2 flex items-center gap-2">
+                          <BookOpen size={18} className="text-indigo-600" /> Academic Notes
+                        </h5>
+                        <p className="text-indigo-800/80 text-sm leading-relaxed">{selectedStudent.academic_notes}</p>
+                      </div>
+                    )}
+                    {selectedStudent.medical_notes && (
+                      <div className="bg-rose-50/50 p-6 rounded-2xl border border-rose-100/50">
+                        <h5 className="font-bold text-rose-900 mb-2 flex items-center gap-2">
+                          <AlertCircle size={18} className="text-rose-600" /> Medical Notes
+                        </h5>
+                        <p className="text-rose-800/80 text-sm leading-relaxed">{selectedStudent.medical_notes}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {user.role === 'admin' && (
                   <div className="bg-primary/5 p-6 rounded-2xl border border-primary/10">
