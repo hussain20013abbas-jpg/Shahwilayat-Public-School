@@ -1,0 +1,26 @@
+{
+  "short_name": "Shahwilayat",
+  "name": "Shahwilayat Public School",
+  "icons": [
+    {
+      "src": "https://api.dicebear.com/7.x/shapes/svg?seed=Shahwilayat",
+      "type": "image/svg+xml",
+      "sizes": "512x512"
+    },
+    {
+      "src": "https://api.dicebear.com/7.x/shapes/png?seed=Shahwilayat&size=192",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://api.dicebear.com/7.x/shapes/png?seed=Shahwilayat&size=512",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#f8fafc",
+  "display": "standalone",
+  "theme_color": "#6366f1",
+  "description": "A comprehensive school management system with student financial tracking and administrative tools."
+}
