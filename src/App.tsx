@@ -76,7 +76,8 @@ import { VoiceChat } from './components/VoiceChat';
 import { QRScanner } from './components/QRScanner';
 import { Logo } from './components/Logo';
 
-const BASE_URL = process.env.APP_URL || '';
+// Use relative path for API calls so it works automatically on Vercel and local dev
+const BASE_URL = '';
 
 const LoadingSpinner = () => (
   <div className="flex justify-center items-center h-64">
@@ -114,7 +115,6 @@ const ShahwilayatApp = () => {
   const [showAddSchedule, setShowAddSchedule] = useState(false);
   const [showAddOnlineClass, setShowAddOnlineClass] = useState(false);
   const [showAddAdmin, setShowAddAdmin] = useState(false);
-  const [showResetPassword, setShowResetPassword] = useState(false);
   const [showTopUp, setShowTopUp] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState('');
@@ -292,31 +292,6 @@ const ShahwilayatApp = () => {
     localStorage.setItem('swps_user', JSON.stringify(userData));
     fetchStudentDetails(profile.id);
     setMultipleProfiles(null);
-  };
-
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setResetMessage({ text: '', type: 'success' });
-    try {
-      const res = await fetch(`${BASE_URL}/api/reset-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(resetForm)
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setResetMessage({ text: 'Password reset successful! You can now login.', type: 'success' });
-        setTimeout(() => {
-          setShowResetPassword(false);
-          setResetForm({ type: 'student', identifier: '', verification: '', new_password: '' });
-          setResetMessage({ text: '', type: 'success' });
-        }, 3000);
-      } else {
-        setResetMessage({ text: data.error || 'Failed to reset password', type: 'error' });
-      }
-    } catch (error) {
-      setResetMessage({ text: 'Connection error. Please try again.', type: 'error' });
-    }
   };
 
   const downloadStatement = () => {
@@ -910,16 +885,6 @@ const ShahwilayatApp = () => {
                   {loginError && (
                     <p className="text-red-500 text-xs font-medium text-center">{loginError}</p>
                   )}
-
-                  <div className="flex justify-end">
-                    <button 
-                      type="button"
-                      onClick={() => setShowResetPassword(true)}
-                      className="text-xs text-indigo-600 hover:underline font-medium"
-                    >
-                      Forgot Password?
-                    </button>
-                  </div>
 
                   <button type="submit" className="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-accent transition-all shadow-lg shadow-primary/20 mt-2">
                     Sign In
@@ -4267,104 +4232,6 @@ const ShahwilayatApp = () => {
                 </div>
                 <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all mt-4">
                   Publish Story
-                </button>
-              </form>
-            </motion.div>
-          </div>
-        )}
-
-        {showResetPassword && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[70] p-4">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
-            >
-              <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-                <h3 className="text-xl font-bold text-gray-900">Reset Password</h3>
-                <button onClick={() => setShowResetPassword(false)} className="text-gray-400 hover:text-gray-600">
-                  <X size={24} />
-                </button>
-              </div>
-              <form onSubmit={handleResetPassword} className="p-6 space-y-4">
-                <div className="flex p-1 bg-gray-100 rounded-xl mb-4">
-                  <button 
-                    type="button"
-                    onClick={() => setResetForm({...resetForm, type: 'student'})}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${resetForm.type === 'student' ? 'bg-white text-primary shadow-sm' : 'text-gray-500'}`}
-                  >
-                    Student
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => setResetForm({...resetForm, type: 'admin'})}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${resetForm.type === 'admin' ? 'bg-white text-primary shadow-sm' : 'text-gray-500'}`}
-                  >
-                    Admin
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => setResetForm({...resetForm, type: 'canteen'})}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${resetForm.type === 'canteen' ? 'bg-white text-primary shadow-sm' : 'text-gray-500'}`}
-                  >
-                    Canteen
-                  </button>
-                </div>
-
-                <p className="text-xs text-gray-500 mb-4">
-                  {resetForm.type === 'student' 
-                    ? 'Provide your CNIC and Parent Contact number to reset your password.' 
-                    : `Provide your ${resetForm.type} username to reset your password.`}
-                </p>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {resetForm.type === 'student' ? 'CNIC Number' : 'Username'}
-                  </label>
-                  <input 
-                    required
-                    type="text" 
-                    placeholder={resetForm.type === 'student' ? '12345-1234567-1' : 'Enter username'}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
-                    value={resetForm.identifier}
-                    onChange={e => setResetForm({...resetForm, identifier: e.target.value})}
-                  />
-                </div>
-
-                {resetForm.type === 'student' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Parent Contact</label>
-                    <input 
-                      required
-                      type="text" 
-                      placeholder="0300-XXXXXXX"
-                      className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
-                      value={resetForm.verification}
-                      onChange={e => setResetForm({...resetForm, verification: e.target.value})}
-                    />
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
-                  <input 
-                    required
-                    type="password" 
-                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
-                    value={resetForm.new_password}
-                    onChange={e => setResetForm({...resetForm, new_password: e.target.value})}
-                  />
-                </div>
-
-                {resetMessage.text && (
-                  <p className={`text-xs font-medium text-center ${resetMessage.type === 'success' ? 'text-emerald-600' : 'text-red-600'}`}>
-                    {resetMessage.text}
-                  </p>
-                )}
-
-                <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all mt-4">
-                  Reset Password
                 </button>
               </form>
             </motion.div>

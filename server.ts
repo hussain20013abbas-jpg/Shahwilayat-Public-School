@@ -8,7 +8,9 @@ import fs from "fs";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const db = new Database("school.db");
+// Use /tmp for Vercel serverless environment compatibility
+const dbPath = process.env.VERCEL ? '/tmp/school.db' : 'school.db';
+const db = new Database(dbPath);
 
 // Initialize database
 db.exec(`
@@ -241,8 +243,9 @@ try {
   }
 } catch (err) {}
 
+const app = express();
+
 async function startServer() {
-  const app = express();
   const PORT = 3000;
 
   app.use(express.json({ limit: '50mb' }));
@@ -849,9 +852,11 @@ async function startServer() {
     res.status(500).json({ error: "Something went wrong! Please try again later." });
   });
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  if (!process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  }
 }
 
 function serveStatic(app: any) {
@@ -869,3 +874,5 @@ function serveStatic(app: any) {
 }
 
 startServer();
+
+export default app;
