@@ -29,6 +29,7 @@ import {
   Home,
   Phone,
   MessageSquare,
+  Mail,
   CalendarDays,
   FileCheck,
   Clock,
@@ -51,7 +52,6 @@ import {
   Loader2,
   QrCode,
   Copy,
-  Mail,
   Bot,
   Sparkles
 } from 'lucide-react';
@@ -86,7 +86,7 @@ const LoadingSpinner = () => (
 );
 
 const ShahwilayatApp = () => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'students' | 'finance' | 'canteen' | 'news' | 'syllabus' | 'schedules' | 'online' | 'attendance' | 'homework' | 'datesheets' | 'results' | 'about' | 'admins' | 'profile' | 'ai' | 'events'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'students' | 'finance' | 'canteen' | 'news' | 'mail' | 'syllabus' | 'schedules' | 'online' | 'attendance' | 'homework' | 'datesheets' | 'results' | 'about' | 'admins' | 'profile' | 'ai' | 'events'>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [user, setUser] = useState<User | null>({ id: 0, name: 'Public', role: 'guest' });
   const [loginForm, setLoginForm] = useState({ username: '', password: '', email: '' });
@@ -97,6 +97,7 @@ const ShahwilayatApp = () => {
   const [admins, setAdmins] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [syllabus, setSyllabus] = useState<Syllabus[]>([]);
+  const [messages, setMessages] = useState<any[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [onlineClasses, setOnlineClasses] = useState<OnlineClass[]>([]);
   const [homework, setHomework] = useState<HomeworkClasswork[]>([]);
@@ -115,6 +116,8 @@ const ShahwilayatApp = () => {
   const [showAddSchedule, setShowAddSchedule] = useState(false);
   const [showAddOnlineClass, setShowAddOnlineClass] = useState(false);
   const [showAddAdmin, setShowAddAdmin] = useState(false);
+  const [showAddMessage, setShowAddMessage] = useState(false);
+  const [messageForm, setMessageForm] = useState({ receiver_id: '', title: '', content: '' });
   const [showTopUp, setShowTopUp] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState('');
@@ -371,7 +374,8 @@ const ShahwilayatApp = () => {
         { key: 'homework', url: `${BASE_URL}/api/homework-classwork` },
         { key: 'datesheets', url: `${BASE_URL}/api/datesheets` },
         { key: 'transactions', url: `${BASE_URL}/api/transactions` },
-        { key: 'admins', url: `${BASE_URL}/api/admins` }
+        { key: 'admins', url: `${BASE_URL}/api/admins` },
+        { key: 'messages', url: `${BASE_URL}/api/messages?userId=${user?.id}&role=${user?.role}` }
       ];
       
       const results = await Promise.all(endpoints.map(async (endpoint) => {
@@ -397,6 +401,7 @@ const ShahwilayatApp = () => {
       if (results[7]) setDatesheets(results[7]);
       if (results[8]) setTransactions(results[8]);
       if (results[9]) setAdmins(results[9]);
+      if (results[10]) setMessages(results[10]);
     } catch (error: any) {
       console.error('Error in fetchData:', error);
     } finally {
@@ -708,6 +713,35 @@ const ShahwilayatApp = () => {
       }
     } catch (error) {
       console.error('Error adding admin:', error);
+      showToast('Connection error', 'error');
+    }
+  };
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await fetch(`${BASE_URL}/api/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sender_id: user?.id,
+          sender_role: user?.role,
+          receiver_id: messageForm.receiver_id || null,
+          title: messageForm.title,
+          content: messageForm.content
+        })
+      });
+      if (res.ok) {
+        setShowAddMessage(false);
+        setMessageForm({ receiver_id: '', title: '', content: '' });
+        fetchData();
+        showToast('Message sent successfully!', 'success');
+      } else {
+        const data = await res.json();
+        showToast(data.error || 'Failed to send message', 'error');
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
       showToast('Connection error', 'error');
     }
   };
@@ -1041,6 +1075,7 @@ const ShahwilayatApp = () => {
             { id: 'canteen', icon: Coffee, label: 'Canteen', roles: ['admin', 'canteen'] },
             { id: 'admins', icon: Settings, label: 'Manage Admins', roles: ['admin'] },
             { id: 'news', icon: Megaphone, label: 'News Feed', roles: ['admin', 'student', 'canteen', 'guest'] },
+            { id: 'mail', icon: Mail, label: 'Mail/Messages', roles: ['admin', 'student'] },
             { id: 'attendance', icon: FileCheck, label: 'Attendance', roles: ['admin', 'student'] },
             { id: 'homework', icon: ClipboardList, label: 'Homework', roles: ['admin', 'student'] },
             { id: 'datesheets', icon: CalendarDays, label: 'Datesheets', roles: ['admin', 'student', 'guest'] },
@@ -1894,6 +1929,76 @@ const ShahwilayatApp = () => {
                     No recent updates to show.
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'mail' && (
+          <div className="space-y-8">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-2xl font-bold text-gray-900">Mail & Messages</h3>
+                <p className="text-gray-500 text-sm">Communication center for students and staff</p>
+              </div>
+              <button 
+                onClick={() => setShowAddMessage(true)}
+                className="bg-primary text-white px-6 py-2.5 rounded-xl flex items-center gap-2 hover:bg-accent transition-all shadow-lg shadow-primary/20"
+              >
+                <Plus size={20} /> New Message
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2 space-y-4">
+                <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider">Inbox</h4>
+                <div className="space-y-3">
+                  {messages.map((msg) => (
+                    <motion.div 
+                      key={msg.id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className={`p-6 rounded-2xl border transition-all ${msg.is_read ? 'bg-white border-gray-100' : 'bg-indigo-50/30 border-indigo-100 shadow-sm'}`}
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${msg.sender_role === 'admin' ? 'bg-rose-100 text-rose-600' : 'bg-blue-100 text-blue-600'}`}>
+                            {msg.sender_role === 'admin' ? <Settings size={18} /> : <Users size={18} />}
+                          </div>
+                          <div>
+                            <h5 className="font-bold text-gray-900">{msg.title}</h5>
+                            <p className="text-xs text-gray-400">From: {msg.sender_role === 'admin' ? 'School Administration' : 'Staff'}</p>
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-gray-400 font-medium">{new Date(msg.date).toLocaleString()}</span>
+                      </div>
+                      <p className="text-gray-600 text-sm leading-relaxed pl-13">{msg.content}</p>
+                    </motion.div>
+                  ))}
+                  {messages.length === 0 && (
+                    <div className="p-12 text-center text-gray-400 bg-white rounded-2xl border border-dashed border-gray-200">
+                      Your inbox is empty.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                  <h4 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                    <Info size={18} className="text-primary" />
+                    Quick Help
+                  </h4>
+                  <p className="text-sm text-gray-600 leading-relaxed mb-4">
+                    Need assistance? Send a message to the administration or check the news feed for general announcements.
+                  </p>
+                  <button 
+                    onClick={() => setActiveTab('news')}
+                    className="w-full py-3 bg-gray-50 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-100 transition-all border border-gray-100"
+                  >
+                    View News Feed
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -4065,6 +4170,61 @@ const ShahwilayatApp = () => {
                 </div>
                 <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all mt-4">
                   Create Account
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {showAddMessage && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                <h3 className="text-xl font-bold text-gray-900">Send New Message</h3>
+                <button onClick={() => setShowAddMessage(false)} className="text-gray-400 hover:text-gray-600">
+                  <X size={24} />
+                </button>
+              </div>
+              <form onSubmit={handleSendMessage} className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Recipient</label>
+                  <select 
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl outline-none"
+                    value={messageForm.receiver_id}
+                    onChange={e => setMessageForm({...messageForm, receiver_id: e.target.value})}
+                  >
+                    <option value="">All Students (Announcement)</option>
+                    {user.role === 'admin' && students.map(s => (
+                      <option key={s.id} value={s.id}>{s.name} ({s.roll_no})</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+                  <input 
+                    required
+                    type="text" 
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl outline-none"
+                    value={messageForm.title}
+                    onChange={e => setMessageForm({...messageForm, title: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+                  <textarea 
+                    required
+                    rows={4}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl outline-none resize-none"
+                    value={messageForm.content}
+                    onChange={e => setMessageForm({...messageForm, content: e.target.value})}
+                  />
+                </div>
+                <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all mt-4 flex items-center justify-center gap-2">
+                  <Mail size={20} /> Send Message
                 </button>
               </form>
             </motion.div>

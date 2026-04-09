@@ -63,238 +63,239 @@ if (process.env.VERCEL) {
 }
 
 console.log(`Initializing database at: ${dbPath}`);
-const db = new Database(dbPath);
+let db: Database.Database;
+try {
+  db = new Database(dbPath, { verbose: console.log });
+  try {
+    db.pragma('journal_mode = WAL');
+  } catch (e) {
+    console.warn('Failed to set journal_mode to WAL, falling back to default:', e);
+  }
+} catch (err: any) {
+  console.error('CRITICAL: Failed to initialize database file:', err);
+  console.log('Falling back to in-memory database for this session.');
+  db = new Database(':memory:', { verbose: console.log });
+}
 
 // Initialize database
-db.exec(`
-  CREATE TABLE IF NOT EXISTS students (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    roll_no TEXT UNIQUE NOT NULL,
-    grade TEXT NOT NULL,
-    class TEXT NOT NULL,
-    section TEXT NOT NULL,
-    parent_contact TEXT,
-    parent_email TEXT,
-    emergency_contact TEXT,
-    academic_notes TEXT,
-    medical_notes TEXT,
-    photo_url TEXT,
-    cnic TEXT NOT NULL,
-    computer_number TEXT,
-    password TEXT NOT NULL,
-    balance REAL DEFAULT 0,
-    attendance_percentage REAL DEFAULT 0
-  );
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS students (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      roll_no TEXT UNIQUE NOT NULL,
+      grade TEXT NOT NULL,
+      class TEXT NOT NULL,
+      section TEXT NOT NULL,
+      parent_contact TEXT,
+      parent_email TEXT,
+      emergency_contact TEXT,
+      academic_notes TEXT,
+      medical_notes TEXT,
+      photo_url TEXT,
+      cnic TEXT NOT NULL,
+      computer_number TEXT,
+      password TEXT NOT NULL,
+      balance REAL DEFAULT 0,
+      attendance_percentage REAL DEFAULT 0
+    );
 
-  CREATE TABLE IF NOT EXISTS admins (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    username TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL,
-    role TEXT DEFAULT 'admin',
-    balance REAL DEFAULT 0
-  );
+    CREATE TABLE IF NOT EXISTS admins (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      username TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL,
+      role TEXT DEFAULT 'admin',
+      balance REAL DEFAULT 0
+    );
 
-  CREATE TABLE IF NOT EXISTS canteen_staff (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    username TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL,
-    student_id INTEGER,
-    balance REAL DEFAULT 0
-  );
+    CREATE TABLE IF NOT EXISTS canteen_staff (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      username TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL,
+      student_id INTEGER,
+      balance REAL DEFAULT 0
+    );
 
-  -- Insert default admin if not exists
-  INSERT OR IGNORE INTO admins (name, username, password, role) VALUES ('Administrator', 'admin', 'admin123', 'admin');
-  INSERT OR IGNORE INTO canteen_staff (name, username, password) VALUES ('Canteen Manager', 'canteen', 'canteen123');
+    -- Insert default admin if not exists
+    INSERT OR IGNORE INTO admins (name, username, password, role) VALUES ('Administrator', 'admin', 'admin123', 'admin');
+    INSERT OR IGNORE INTO canteen_staff (name, username, password) VALUES ('Canteen Manager', 'canteen', 'canteen123');
 
-  CREATE TABLE IF NOT EXISTS transactions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    student_id INTEGER NOT NULL,
-    amount REAL NOT NULL,
-    type TEXT CHECK(type IN ('credit', 'debit')) NOT NULL,
-    fee_type TEXT CHECK(fee_type IN ('tuition', 'bus', 'activity', 'canteen', 'other')) DEFAULT 'other',
-    description TEXT,
-    date DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (student_id) REFERENCES students(id)
-  );
+    CREATE TABLE IF NOT EXISTS transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      student_id INTEGER NOT NULL,
+      amount REAL NOT NULL,
+      type TEXT CHECK(type IN ('credit', 'debit')) NOT NULL,
+      fee_type TEXT CHECK(fee_type IN ('tuition', 'bus', 'activity', 'canteen', 'other')) DEFAULT 'other',
+      description TEXT,
+      date DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (student_id) REFERENCES students(id)
+    );
 
-  CREATE TABLE IF NOT EXISTS announcements (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    content TEXT NOT NULL,
-    category TEXT CHECK(category IN ('General', 'Events', 'Academics')) NOT NULL,
-    date DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
+    CREATE TABLE IF NOT EXISTS announcements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      category TEXT CHECK(category IN ('General', 'Events', 'Academics')) NOT NULL,
+      date DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
 
-  CREATE TABLE IF NOT EXISTS attendance (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    student_id INTEGER NOT NULL,
-    date DATE NOT NULL,
-    status TEXT CHECK(status IN ('Present', 'Absent', 'Late')) NOT NULL,
-    FOREIGN KEY (student_id) REFERENCES students(id)
-  );
+    CREATE TABLE IF NOT EXISTS attendance (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      student_id INTEGER NOT NULL,
+      date DATE NOT NULL,
+      status TEXT CHECK(status IN ('Present', 'Absent', 'Late')) NOT NULL,
+      FOREIGN KEY (student_id) REFERENCES students(id)
+    );
 
-  CREATE TABLE IF NOT EXISTS academic_records (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    student_id INTEGER NOT NULL,
-    subject TEXT NOT NULL,
-    marks INTEGER NOT NULL,
-    total_marks INTEGER NOT NULL,
-    term TEXT NOT NULL,
-    FOREIGN KEY (student_id) REFERENCES students(id)
-  );
+    CREATE TABLE IF NOT EXISTS academic_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      student_id INTEGER NOT NULL,
+      subject TEXT NOT NULL,
+      marks INTEGER NOT NULL,
+      total_marks INTEGER NOT NULL,
+      term TEXT NOT NULL,
+      FOREIGN KEY (student_id) REFERENCES students(id)
+    );
 
-  CREATE TABLE IF NOT EXISTS syllabus (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    subject TEXT NOT NULL,
-    grade TEXT NOT NULL,
-    content TEXT NOT NULL,
-    file_url TEXT
-  );
+    CREATE TABLE IF NOT EXISTS messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sender_id INTEGER NOT NULL,
+      sender_role TEXT NOT NULL,
+      receiver_id INTEGER, -- NULL for all (announcement)
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      is_read BOOLEAN DEFAULT 0,
+      date DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
 
-  CREATE TABLE IF NOT EXISTS schedules (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    grade TEXT NOT NULL,
-    day TEXT NOT NULL,
-    time_slot TEXT NOT NULL,
-    subject TEXT NOT NULL,
-    teacher TEXT NOT NULL,
-    location TEXT,
-    is_weekend BOOLEAN DEFAULT 0
-  );
+    CREATE TABLE IF NOT EXISTS syllabus (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      subject TEXT NOT NULL,
+      grade TEXT NOT NULL,
+      content TEXT NOT NULL,
+      file_url TEXT
+    );
 
-  CREATE TABLE IF NOT EXISTS online_classes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    grade TEXT NOT NULL,
-    subject TEXT NOT NULL,
-    link TEXT NOT NULL,
-    time DATETIME NOT NULL
-  );
+    CREATE TABLE IF NOT EXISTS schedules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      grade TEXT NOT NULL,
+      day TEXT NOT NULL,
+      time_slot TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      teacher TEXT NOT NULL,
+      location TEXT,
+      is_weekend BOOLEAN DEFAULT 0
+    );
 
-  CREATE TABLE IF NOT EXISTS homework_classwork (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    type TEXT CHECK(type IN ('Homework', 'Classwork')) NOT NULL,
-    grade TEXT NOT NULL,
-    class TEXT NOT NULL,
-    section TEXT NOT NULL,
-    subject TEXT NOT NULL,
-    content TEXT NOT NULL,
-    date_assigned DATE DEFAULT CURRENT_DATE,
-    date_due DATE
-  );
+    CREATE TABLE IF NOT EXISTS online_classes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      grade TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      link TEXT NOT NULL,
+      time DATETIME NOT NULL
+    );
 
-  CREATE TABLE IF NOT EXISTS datesheets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    exam_name TEXT NOT NULL,
-    grade TEXT NOT NULL,
-    subject TEXT NOT NULL,
-    date DATE NOT NULL,
-    time TEXT NOT NULL
-  );
-`);
+    CREATE TABLE IF NOT EXISTS homework_classwork (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT CHECK(type IN ('Homework', 'Classwork')) NOT NULL,
+      grade TEXT NOT NULL,
+      class TEXT NOT NULL,
+      section TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      content TEXT NOT NULL,
+      date_assigned DATE DEFAULT CURRENT_DATE,
+      date_due DATE
+    );
+
+    CREATE TABLE IF NOT EXISTS datesheets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      exam_name TEXT NOT NULL,
+      grade TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      date DATE NOT NULL,
+      time TEXT NOT NULL
+    );
+  `);
+  console.log('Database tables initialized successfully.');
+  
+  // Verify default admin exists
+  const admin = db.prepare("SELECT * FROM admins WHERE username = 'admin'").get();
+  if (!admin) {
+    console.log('Default admin missing, inserting...');
+    db.prepare("INSERT INTO admins (name, username, password, role) VALUES (?, ?, ?, ?)").run('Administrator', 'admin', 'admin123', 'admin');
+  }
+} catch (err: any) {
+  console.error('Database initialization error:', err);
+}
 
 // Migration: Add missing columns if they don't exist
 try {
-  db.exec("ALTER TABLE admins ADD COLUMN balance REAL DEFAULT 0");
+  const adminCols = db.prepare("PRAGMA table_info(admins)").all().map((c: any) => c.name);
+  if (!adminCols.includes('balance')) {
+    db.exec("ALTER TABLE admins ADD COLUMN balance REAL DEFAULT 0");
+  }
 } catch (e) {}
 try {
-  db.exec("ALTER TABLE canteen_staff ADD COLUMN balance REAL DEFAULT 0");
-} catch (e) {}
-try {
-  db.exec("ALTER TABLE canteen_staff ADD COLUMN student_id INTEGER");
+  const canteenCols = db.prepare("PRAGMA table_info(canteen_staff)").all().map((c: any) => c.name);
+  if (!canteenCols.includes('balance')) {
+    db.exec("ALTER TABLE canteen_staff ADD COLUMN balance REAL DEFAULT 0");
+  }
+  if (!canteenCols.includes('student_id')) {
+    db.exec("ALTER TABLE canteen_staff ADD COLUMN student_id INTEGER");
+  }
 } catch (e) {}
 
 try {
   const tableInfo = db.prepare("PRAGMA table_info(students)").all();
   const columns = (tableInfo as any[]).map((c: any) => c.name);
-  console.log("Current columns in students table:", columns);
   
   if (!columns.includes('cnic')) {
-    try {
-      console.log("Adding cnic column...");
-      db.exec("ALTER TABLE students ADD COLUMN cnic TEXT DEFAULT ''");
-      db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_students_cnic ON students(cnic) WHERE cnic != ''");
-    } catch (e) {
-      console.error("Error adding cnic column:", e);
-    }
+    db.exec("ALTER TABLE students ADD COLUMN cnic TEXT DEFAULT ''");
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_students_cnic ON students(cnic) WHERE cnic != ''");
   }
-  
   if (!columns.includes('grade')) {
-    try {
-      console.log("Adding grade column...");
-      db.exec("ALTER TABLE students ADD COLUMN grade TEXT DEFAULT ''");
-    } catch (e) {
-      console.error("Error adding grade column:", e);
-    }
+    db.exec("ALTER TABLE students ADD COLUMN grade TEXT DEFAULT ''");
   }
-  
   if (!columns.includes('password')) {
-    try {
-      console.log("Adding password column...");
-      db.exec("ALTER TABLE students ADD COLUMN password TEXT DEFAULT 'password123'");
-    } catch (e) {
-      console.error("Error adding password column:", e);
-    }
+    db.exec("ALTER TABLE students ADD COLUMN password TEXT DEFAULT 'password123'");
   }
-
   if (!columns.includes('parent_contact')) {
-    try {
-      console.log("Adding parent_contact column...");
-      db.exec("ALTER TABLE students ADD COLUMN parent_contact TEXT DEFAULT ''");
-    } catch (e) {
-      console.error("Error adding parent_contact column:", e);
-    }
+    db.exec("ALTER TABLE students ADD COLUMN parent_contact TEXT DEFAULT ''");
   }
-
   if (!columns.includes('parent_email')) {
-    try {
-      console.log("Adding parent_email column...");
-      db.exec("ALTER TABLE students ADD COLUMN parent_email TEXT DEFAULT ''");
-    } catch (e) {
-      console.error("Error adding parent_email column:", e);
-    }
+    db.exec("ALTER TABLE students ADD COLUMN parent_email TEXT DEFAULT ''");
   }
-
   if (!columns.includes('photo_url')) {
-    try {
-      console.log("Adding photo_url column...");
-      db.exec("ALTER TABLE students ADD COLUMN photo_url TEXT DEFAULT ''");
-    } catch (e) {
-      console.error("Error adding photo_url column:", e);
-    }
+    db.exec("ALTER TABLE students ADD COLUMN photo_url TEXT DEFAULT ''");
   }
-
   if (!columns.includes('emergency_contact')) {
-    try {
-      db.exec("ALTER TABLE students ADD COLUMN emergency_contact TEXT DEFAULT ''");
-    } catch (e) {}
+    db.exec("ALTER TABLE students ADD COLUMN emergency_contact TEXT DEFAULT ''");
   }
   if (!columns.includes('academic_notes')) {
-    try {
-      db.exec("ALTER TABLE students ADD COLUMN academic_notes TEXT DEFAULT ''");
-    } catch (e) {}
+    db.exec("ALTER TABLE students ADD COLUMN academic_notes TEXT DEFAULT ''");
   }
   if (!columns.includes('medical_notes')) {
-    try {
-      db.exec("ALTER TABLE students ADD COLUMN medical_notes TEXT DEFAULT ''");
-    } catch (e) {}
+    db.exec("ALTER TABLE students ADD COLUMN medical_notes TEXT DEFAULT ''");
   }
-} catch (err) {
-  console.error("Migration error:", err);
+  if (!columns.includes('computer_number')) {
+    db.exec("ALTER TABLE students ADD COLUMN computer_number TEXT DEFAULT ''");
+  }
+} catch (err: any) {
+  console.error('Migration error:', err);
 }
 
+// Debug: Check if default admin exists
 try {
-  const scheduleInfo = db.prepare("PRAGMA table_info(schedules)").all();
-  const scheduleCols = (scheduleInfo as any[]).map((c: any) => c.name);
-  if (!scheduleCols.includes('location')) {
-    db.exec("ALTER TABLE schedules ADD COLUMN location TEXT DEFAULT ''");
+  const admin = db.prepare("SELECT * FROM admins WHERE username = 'admin'").get();
+  console.log('Default admin check:', admin ? 'Found' : 'Not Found');
+  if (admin) {
+    console.log('Admin details:', { id: (admin as any).id, username: (admin as any).username, role: (admin as any).role });
   }
-  if (!scheduleCols.includes('is_weekend')) {
-    db.exec("ALTER TABLE schedules ADD COLUMN is_weekend BOOLEAN DEFAULT 0");
-  }
-} catch (err) {}
+} catch (e: any) {
+  console.error('Error checking default admin:', e);
+}
 
 const app = express();
 
@@ -307,19 +308,29 @@ async function startServer() {
   // Health check route - ALWAYS available
   app.get("/health", (req, res) => {
     let dbStatus = "unknown";
+    let dbError = null;
     try {
       db.prepare("SELECT 1").get();
       dbStatus = "connected";
     } catch (e: any) {
-      dbStatus = `error: ${e.message}`;
+      dbStatus = "error";
+      dbError = e.message;
     }
+
+    let dirContents: string[] = [];
+    try {
+      dirContents = fs.readdirSync(process.cwd());
+    } catch (e) {}
 
     res.json({ 
       status: "ok", 
       database: dbStatus,
+      dbError,
+      dbPath,
       mode: process.env.NODE_ENV,
       vercel: !!process.env.VERCEL,
       cwd: process.cwd(),
+      dirContents,
       timestamp: new Date().toISOString()
     });
   });
@@ -328,6 +339,7 @@ async function startServer() {
   app.post("/api/login", (req, res) => {
     try {
       const { username, password, type } = req.body;
+      console.log(`Login attempt: ${username} as ${type}`);
       
       if (type === 'admin') {
         const admin = db.prepare("SELECT * FROM admins WHERE username = ?").get(username) as any;
@@ -381,7 +393,36 @@ async function startServer() {
         });
       }
     } catch (err: any) {
-      res.status(500).json({ error: "Server error during login" });
+      console.error("Login error details:", err);
+      res.status(500).json({ error: `Server error: ${err.message}` });
+    }
+  });
+
+  app.get("/api/messages", (req, res) => {
+    try {
+      const { userId, role } = req.query;
+      let messages;
+      if (role === 'admin') {
+        messages = db.prepare("SELECT * FROM messages ORDER BY date DESC").all();
+      } else {
+        messages = db.prepare("SELECT * FROM messages WHERE receiver_id = ? OR receiver_id IS NULL ORDER BY date DESC").all(userId);
+      }
+      res.json(messages);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/messages", (req, res) => {
+    try {
+      const { sender_id, sender_role, receiver_id, title, content } = req.body;
+      const result = db.prepare(`
+        INSERT INTO messages (sender_id, sender_role, receiver_id, title, content)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(sender_id, sender_role, receiver_id, title, content);
+      res.json({ id: result.lastInsertRowid });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 
