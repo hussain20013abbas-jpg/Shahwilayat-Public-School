@@ -269,8 +269,14 @@ const ShahwilayatApp = () => {
           fetchStudentDetails(userData.student_id);
         }
       } else {
-        const errorData = await res.json();
-        setLoginError(errorData.error || 'Invalid credentials');
+        let errorMessage = 'Invalid credentials';
+        try {
+          const errorData = await res.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          errorMessage = `Server error: ${res.status}`;
+        }
+        setLoginError(errorMessage);
       }
     } catch (error) {
       setLoginError('Connection error. Please try again.');
@@ -356,46 +362,43 @@ const ShahwilayatApp = () => {
     setLoading(true);
     try {
       const endpoints = [
-        `${BASE_URL}/api/stats`,
-        `${BASE_URL}/api/students`,
-        `${BASE_URL}/api/announcements`,
-        `${BASE_URL}/api/syllabus`,
-        `${BASE_URL}/api/schedules`,
-        `${BASE_URL}/api/online-classes`,
-        `${BASE_URL}/api/homework-classwork`,
-        `${BASE_URL}/api/datesheets`,
-        `${BASE_URL}/api/transactions`,
-        `${BASE_URL}/api/admins`
+        { key: 'stats', url: `${BASE_URL}/api/stats` },
+        { key: 'students', url: `${BASE_URL}/api/students` },
+        { key: 'announcements', url: `${BASE_URL}/api/announcements` },
+        { key: 'syllabus', url: `${BASE_URL}/api/syllabus` },
+        { key: 'schedules', url: `${BASE_URL}/api/schedules` },
+        { key: 'onlineClasses', url: `${BASE_URL}/api/online-classes` },
+        { key: 'homework', url: `${BASE_URL}/api/homework-classwork` },
+        { key: 'datesheets', url: `${BASE_URL}/api/datesheets` },
+        { key: 'transactions', url: `${BASE_URL}/api/transactions` },
+        { key: 'admins', url: `${BASE_URL}/api/admins` }
       ];
       
-      const results = await Promise.all(endpoints.map(url => fetch(url)));
-      
-      const data = await Promise.all(results.map(async (res, index) => {
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(`API error on ${endpoints[index]}: ${res.status} ${text.substring(0, 100)}`);
+      const results = await Promise.all(endpoints.map(async (endpoint) => {
+        try {
+          const res = await fetch(endpoint.url);
+          if (!res.ok) return null;
+          const contentType = res.headers.get("content-type");
+          if (!contentType || !contentType.includes("application/json")) return null;
+          return await res.json();
+        } catch (e) {
+          console.error(`Failed to fetch ${endpoint.key}:`, e);
+          return null;
         }
-        const contentType = res.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-          const text = await res.text();
-          throw new Error(`Expected JSON from ${endpoints[index]} but got ${contentType}: ${text.substring(0, 100)}`);
-        }
-        return res.json();
       }));
 
-      setStats(data[0]);
-      setStudents(data[1]);
-      setAnnouncements(data[2]);
-      setSyllabus(data[3]);
-      setSchedules(data[4]);
-      setOnlineClasses(data[5]);
-      setHomework(data[6]);
-      setDatesheets(data[7]);
-      setTransactions(data[8]);
-      setAdmins(data[9]);
+      if (results[0]) setStats(results[0]);
+      if (results[1]) setStudents(results[1]);
+      if (results[2]) setAnnouncements(results[2]);
+      if (results[3]) setSyllabus(results[3]);
+      if (results[4]) setSchedules(results[4]);
+      if (results[5]) setOnlineClasses(results[5]);
+      if (results[6]) setHomework(results[6]);
+      if (results[7]) setDatesheets(results[7]);
+      if (results[8]) setTransactions(results[8]);
+      if (results[9]) setAdmins(results[9]);
     } catch (error: any) {
-      console.error('Error fetching data:', error);
-      setLoginError(error.message); // Show error in UI if needed
+      console.error('Error in fetchData:', error);
     } finally {
       setLoading(false);
     }
@@ -1250,7 +1253,7 @@ const ShahwilayatApp = () => {
             </div>
           )}
 
-          {activeTab === 'dashboard' && stats && (
+          {activeTab === 'dashboard' && (user.role === 'guest' || stats) && (
             <div className="space-y-8">
               {user.role === 'student' && selectedStudent ? (
                 <div className="space-y-8">

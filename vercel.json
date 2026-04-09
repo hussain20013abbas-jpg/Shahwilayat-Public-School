@@ -3,7 +3,13 @@
   "builds": [
     {
       "src": "server.ts",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": [
+          "node_modules/better-sqlite3/build/Release/better_sqlite3.node",
+          "school.db"
+        ]
+      }
     },
     {
       "src": "package.json",

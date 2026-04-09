@@ -1,15 +1,68 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Vercel compatibility for __dirname in both ESM and CJS
+const getDirname = () => {
+  try {
+    if (typeof __dirname !== 'undefined') return __dirname;
+    return path.dirname(fileURLToPath(import.meta.url));
+  } catch (e) {
+    return process.cwd();
+  }
+};
+
+const __dirname_compat = getDirname();
+
+if (process.env.VERCEL) {
+  console.log('Vercel Debug - Current Directory Contents:', fs.readdirSync(process.cwd()));
+  console.log('Vercel Debug - __dirname_compat Contents:', fs.readdirSync(__dirname_compat));
+}
 
 // Use /tmp for Vercel serverless environment compatibility
-const dbPath = process.env.VERCEL ? '/tmp/school.db' : 'school.db';
+let dbPath = path.join(process.cwd(), 'school.db');
+
+if (process.env.VERCEL) {
+  const tmpDbPath = '/tmp/school.db';
+  console.log('Vercel environment detected. Attempting to use /tmp/school.db');
+  
+  if (!fs.existsSync(tmpDbPath)) {
+    try {
+      // Try multiple possible source paths
+      const possibleSources = [
+        path.join(process.cwd(), 'school.db'),
+        path.join(__dirname_compat, 'school.db'),
+        path.join(__dirname_compat, '..', 'school.db')
+      ];
+      
+      let sourcePath = '';
+      for (const p of possibleSources) {
+        if (fs.existsSync(p)) {
+          sourcePath = p;
+          break;
+        }
+      }
+      
+      if (sourcePath) {
+        fs.copyFileSync(sourcePath, tmpDbPath);
+        console.log(`Successfully copied database from ${sourcePath} to ${tmpDbPath}`);
+        dbPath = tmpDbPath;
+      } else {
+        console.error('Could not find source school.db in any of:', possibleSources);
+        // Fallback to original path, though it might be read-only
+      }
+    } catch (e) {
+      console.error('Failed to copy database to /tmp:', e);
+    }
+  } else {
+    console.log('/tmp/school.db already exists, using it.');
+    dbPath = tmpDbPath;
+  }
+}
+
+console.log(`Initializing database at: ${dbPath}`);
 const db = new Database(dbPath);
 
 // Initialize database
@@ -253,9 +306,19 @@ async function startServer() {
 
   // Health check route - ALWAYS available
   app.get("/health", (req, res) => {
+    let dbStatus = "unknown";
+    try {
+      db.prepare("SELECT 1").get();
+      dbStatus = "connected";
+    } catch (e: any) {
+      dbStatus = `error: ${e.message}`;
+    }
+
     res.json({ 
       status: "ok", 
+      database: dbStatus,
       mode: process.env.NODE_ENV,
+      vercel: !!process.env.VERCEL,
       cwd: process.cwd(),
       timestamp: new Date().toISOString()
     });
@@ -745,7 +808,7 @@ async function startServer() {
 
   // Vite middleware for development
   const isDev = process.env.NODE_ENV === "development" || !process.env.NODE_ENV;
-  const distPath = path.join(__dirname, "dist");
+  const distPath = path.join(__dirname_compat, "dist");
   const indexExists = fs.existsSync(path.join(distPath, "index.html"));
   
   console.log("Environment Check:", {
@@ -758,6 +821,7 @@ async function startServer() {
   if (isDev && !indexExists) {
     console.log("Starting in DEVELOPMENT mode with Vite");
     try {
+      const { createServer: createViteServer } = await import("vite");
       const vite = await createViteServer({
         server: { middlewareMode: true },
         appType: "spa",
@@ -860,7 +924,7 @@ async function startServer() {
 }
 
 function serveStatic(app: any) {
-  const distPath = path.join(__dirname, "dist");
+  const distPath = path.join(__dirname_compat, "dist");
   console.log("Serving static files from:", distPath);
   app.use(express.static(distPath));
   app.get("*", (req: any, res: any) => {
