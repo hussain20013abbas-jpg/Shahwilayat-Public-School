@@ -1,0 +1,26 @@
+{
+  "background_color": "#ffffff",
+  "dir": "ltr",
+  "display": "fullscreen",
+  "name": "ais-dev-cwlx6o6oknqbcmzmhr5546-262302819039.asia-southeast1.run",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "ais-dev-cwlx6o6oknqbcmzmhr5546-262302819039.asia-southeast1.run",
+  "start_url": "https://ais-dev-cwlx6o6oknqbcmzmhr5546-262302819039.asia-southeast1.run.app/?origin=https%3A%2F%2Faistudio.google.com#dashboard",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "https://ais-dev-cwlx6o6oknqbcmzmhr5546-262302819039.asia-southeast1.run.app/favicon.ico",
+      "type": "image/x-icon",
+      "isSquare": false,
+      "isPng": false,
+      "isWebp": false,
+      "isJpg": false,
+      "width": 0,
+      "is512x512": false,
+      "is256x256": false,
+      "is192x192": false
+    }
+  ],
+  "lang": "en"
+}
