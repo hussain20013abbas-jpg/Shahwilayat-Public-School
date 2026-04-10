@@ -48,13 +48,13 @@ if (process.env.VERCEL) {
       if (sourcePath) {
         fs.copyFileSync(sourcePath, tmpDbPath);
         console.log(`Successfully copied database from ${sourcePath} to ${tmpDbPath}`);
-        dbPath = tmpDbPath;
       } else {
-        console.error('Could not find source school.db in any of:', possibleSources);
-        // Fallback to original path, though it might be read-only
+        console.warn('Could not find source school.db, will create new one in /tmp');
       }
+      dbPath = tmpDbPath;
     } catch (e) {
       console.error('Failed to copy database to /tmp:', e);
+      dbPath = tmpDbPath; // Try /tmp anyway
     }
   } else {
     console.log('/tmp/school.db already exists, using it.');
@@ -121,6 +121,10 @@ try {
     -- Insert default admin if not exists
     INSERT OR IGNORE INTO admins (name, username, password, role) VALUES ('Administrator', 'admin', 'admin123', 'admin');
     INSERT OR IGNORE INTO canteen_staff (name, username, password) VALUES ('Canteen Manager', 'canteen', 'canteen123');
+
+    -- Insert a default student for testing if none exist
+    INSERT OR IGNORE INTO students (name, roll_no, grade, class, section, cnic, password, balance) 
+    VALUES ('Demo Student', '2024-001', '10', '10', 'A', '1234567890123', 'student123', 5000);
 
     CREATE TABLE IF NOT EXISTS transactions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -216,6 +220,14 @@ try {
       subject TEXT NOT NULL,
       date DATE NOT NULL,
       time TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS fee_structures (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      grade TEXT NOT NULL,
+      amount REAL NOT NULL,
+      frequency TEXT CHECK(frequency IN ('Monthly', 'Quarterly', 'Yearly')) NOT NULL,
+      description TEXT
     );
   `);
   console.log('Database tables initialized successfully.');
@@ -421,6 +433,63 @@ async function startServer() {
         VALUES (?, ?, ?, ?, ?)
       `).run(sender_id, sender_role, receiver_id, title, content);
       res.json({ id: result.lastInsertRowid });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Fee Management Routes
+  app.get("/api/fee-structures", (req, res) => {
+    try {
+      const data = db.prepare("SELECT * FROM fee_structures").all();
+      res.json(data);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/fee-structures", (req, res) => {
+    try {
+      const { grade, amount, frequency, description } = req.body;
+      db.prepare("INSERT INTO fee_structures (grade, amount, frequency, description) VALUES (?, ?, ?, ?)").run(grade, amount, frequency, description);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/fee-structures/:id", (req, res) => {
+    try {
+      db.prepare("DELETE FROM fee_structures WHERE id = ?").run(req.params.id);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/fee-reminders", (req, res) => {
+    try {
+      const { grade } = req.body;
+      let students;
+      if (grade) {
+        students = db.prepare("SELECT * FROM students WHERE grade = ? AND balance < 0").all(grade);
+      } else {
+        students = db.prepare("SELECT * FROM students WHERE balance < 0").all();
+      }
+
+      const insertMessage = db.prepare(`
+        INSERT INTO messages (sender_id, sender_role, receiver_id, title, content)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+
+      const transaction = db.transaction((students) => {
+        for (const student of students) {
+          insertMessage.run(0, 'admin', student.id, 'Fee Payment Reminder', `Dear Parent, this is a reminder regarding the outstanding balance of Rs. ${Math.abs(student.balance)} for ${student.name}. Please settle the dues at your earliest convenience.`);
+        }
+      });
+
+      transaction(students);
+      res.json({ success: true, count: students.length });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

@@ -36,6 +36,8 @@ import {
   Book,
   ClipboardList,
   Award,
+  Bell,
+  Trash2,
   Library as LibraryIcon,
   Building2,
   MonitorPlay,
@@ -86,9 +88,9 @@ const LoadingSpinner = () => (
 );
 
 const ShahwilayatApp = () => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'students' | 'finance' | 'canteen' | 'news' | 'mail' | 'syllabus' | 'schedules' | 'online' | 'attendance' | 'homework' | 'datesheets' | 'results' | 'about' | 'admins' | 'profile' | 'ai' | 'events'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'students' | 'finance' | 'fees' | 'canteen' | 'news' | 'mail' | 'syllabus' | 'schedules' | 'online' | 'attendance' | 'homework' | 'datesheets' | 'results' | 'about' | 'admins' | 'profile' | 'ai' | 'events'>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [user, setUser] = useState<User | null>({ id: 0, name: 'Public', role: 'guest' });
+  const [user, setUser] = useState<User | null>(null);
   const [loginForm, setLoginForm] = useState({ username: '', password: '', email: '' });
   const [loginError, setLoginError] = useState('');
   const [multipleProfiles, setMultipleProfiles] = useState<any[] | null>(null);
@@ -98,6 +100,7 @@ const ShahwilayatApp = () => {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [syllabus, setSyllabus] = useState<Syllabus[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
+  const [feeStructures, setFeeStructures] = useState<any[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [onlineClasses, setOnlineClasses] = useState<OnlineClass[]>([]);
   const [homework, setHomework] = useState<HomeworkClasswork[]>([]);
@@ -116,7 +119,9 @@ const ShahwilayatApp = () => {
   const [showAddSchedule, setShowAddSchedule] = useState(false);
   const [showAddOnlineClass, setShowAddOnlineClass] = useState(false);
   const [showAddAdmin, setShowAddAdmin] = useState(false);
+  const [showAddFeeStructure, setShowAddFeeStructure] = useState(false);
   const [showAddMessage, setShowAddMessage] = useState(false);
+  const [showReceipt, setShowReceipt] = useState<Transaction | null>(null);
   const [messageForm, setMessageForm] = useState({ receiver_id: '', title: '', content: '' });
   const [showTopUp, setShowTopUp] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
@@ -142,6 +147,7 @@ const ShahwilayatApp = () => {
   const [newSchedule, setNewSchedule] = useState({ grade: '', day: 'Monday', time_slot: '', subject: '', teacher: '', location: '', is_weekend: false });
   const [newOnlineClass, setNewOnlineClass] = useState({ grade: '', subject: '', link: '', time: '' });
   const [newAdmin, setNewAdmin] = useState({ name: '', username: '', password: '', role: 'admin' });
+  const [newFeeStructure, setNewFeeStructure] = useState({ grade: '', amount: '', frequency: 'Monthly', description: '' });
   const [resetForm, setResetForm] = useState({ type: 'student' as 'student' | 'admin' | 'canteen', identifier: '', verification: '', new_password: '' });
   const [resetMessage, setResetMessage] = useState({ text: '', type: 'success' as 'success' | 'error' });
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
@@ -236,22 +242,22 @@ const ShahwilayatApp = () => {
     e.preventDefault();
     setLoginError('');
     
-    let type = 'student';
-    let payloadUsername = loginForm.username;
-    let payloadPassword = loginForm.password;
+    const username = loginForm.username.trim();
+    const password = loginForm.password.trim();
 
-    if (loginForm.username.toLowerCase() === 'admin' && loginForm.password.toLowerCase() === 'admin 123') {
+    let type = 'student';
+    let payloadUsername = username;
+    let payloadPassword = password;
+
+    // Special handling for common admin/canteen credentials
+    if (username.toLowerCase() === 'admin' && (password.toLowerCase() === 'admin 123' || password === 'admin123')) {
       type = 'admin';
       payloadUsername = 'admin';
       payloadPassword = 'admin123';
-    } else if (loginForm.username.toLowerCase() === 'canteen' && loginForm.password.toLowerCase() === 'canteen 123') {
+    } else if (username.toLowerCase() === 'canteen' && (password.toLowerCase() === 'canteen 123' || password === 'canteen123')) {
       type = 'canteen';
       payloadUsername = 'canteen';
       payloadPassword = 'canteen123';
-    } else if (loginForm.username === 'admin' && loginForm.password === 'admin123') {
-      type = 'admin';
-    } else if (loginForm.username === 'canteen' && loginForm.password === 'canteen123') {
-      type = 'canteen';
     }
 
     try {
@@ -260,6 +266,7 @@ const ShahwilayatApp = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: payloadUsername, password: payloadPassword, type })
       });
+      
       if (res.ok) {
         const userData = await res.json();
         if (userData.multiple) {
@@ -277,12 +284,13 @@ const ShahwilayatApp = () => {
           const errorData = await res.json();
           errorMessage = errorData.error || errorMessage;
         } catch (e) {
-          errorMessage = `Server error: ${res.status}`;
+          errorMessage = `Server error: ${res.status}. Please check if the server is running.`;
         }
         setLoginError(errorMessage);
       }
     } catch (error) {
-      setLoginError('Connection error. Please try again.');
+      console.error('Login error:', error);
+      setLoginError('Connection error. The server might be offline or starting up. Please wait a moment and try again.');
     }
   };
 
@@ -375,7 +383,8 @@ const ShahwilayatApp = () => {
         { key: 'datesheets', url: `${BASE_URL}/api/datesheets` },
         { key: 'transactions', url: `${BASE_URL}/api/transactions` },
         { key: 'admins', url: `${BASE_URL}/api/admins` },
-        { key: 'messages', url: `${BASE_URL}/api/messages?userId=${user?.id}&role=${user?.role}` }
+        { key: 'messages', url: `${BASE_URL}/api/messages?userId=${user?.id}&role=${user?.role}` },
+        { key: 'feeStructures', url: `${BASE_URL}/api/fee-structures` }
       ];
       
       const results = await Promise.all(endpoints.map(async (endpoint) => {
@@ -402,10 +411,58 @@ const ShahwilayatApp = () => {
       if (results[8]) setTransactions(results[8]);
       if (results[9]) setAdmins(results[9]);
       if (results[10]) setMessages(results[10]);
+      if (results[11]) setFeeStructures(results[11]);
     } catch (error: any) {
       console.error('Error in fetchData:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAddFeeStructure = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await fetch(`${BASE_URL}/api/fee-structures`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newFeeStructure)
+      });
+      if (res.ok) {
+        setShowAddFeeStructure(false);
+        setNewFeeStructure({ grade: '', amount: '', frequency: 'Monthly', description: '' });
+        fetchData();
+        showToast('Fee structure added successfully!');
+      }
+    } catch (error) {
+      console.error('Error adding fee structure:', error);
+    }
+  };
+
+  const handleDeleteFeeStructure = async (id: number) => {
+    try {
+      const res = await fetch(`${BASE_URL}/api/fee-structures/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        fetchData();
+        showToast('Fee structure deleted!');
+      }
+    } catch (error) {
+      console.error('Error deleting fee structure:', error);
+    }
+  };
+
+  const handleSendFeeReminders = async (grade?: string) => {
+    try {
+      const res = await fetch(`${BASE_URL}/api/fee-reminders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grade })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        showToast(`Sent ${data.count} reminders!`);
+      }
+    } catch (error) {
+      console.error('Error sending reminders:', error);
     }
   };
 
@@ -926,12 +983,23 @@ const ShahwilayatApp = () => {
                   <button type="submit" className="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-accent transition-all shadow-lg shadow-primary/20 mt-2">
                     Sign In
                   </button>
+                  
+                  <div className="relative my-6">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-gray-200"></div>
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-white px-2 text-gray-500 font-bold">Or</span>
+                    </div>
+                  </div>
+
                   <button 
                     type="button" 
                     onClick={() => setUser({ id: 0, name: 'Public', role: 'guest' })}
-                    className="w-full bg-slate-100 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-200 transition-all mt-3 border border-slate-200"
+                    className="w-full bg-slate-50 text-slate-600 py-3 rounded-xl font-bold hover:bg-slate-100 transition-all border border-slate-200 flex items-center justify-center gap-2"
                   >
-                    Back to Website
+                    <Globe size={18} />
+                    Explore as Guest
                   </button>
                 </form>
               </>
@@ -1071,6 +1139,7 @@ const ShahwilayatApp = () => {
             { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'student', 'canteen', 'guest'] },
             { id: 'events', icon: Calendar, label: 'Events', roles: ['admin', 'student', 'canteen', 'guest'] },
             { id: 'students', icon: Users, label: 'Students', roles: ['admin', 'canteen'] },
+            { id: 'fees', icon: FileCheck, label: 'Fee Management', roles: ['admin'] },
             { id: 'finance', icon: Wallet, label: user.role === 'student' ? 'My Wallet' : 'Finance', roles: ['admin', 'canteen', 'student'] },
             { id: 'canteen', icon: Coffee, label: 'Canteen', roles: ['admin', 'canteen'] },
             { id: 'admins', icon: Settings, label: 'Manage Admins', roles: ['admin'] },
@@ -1091,7 +1160,7 @@ const ShahwilayatApp = () => {
               key={item.id}
               onClick={() => item.onClick ? item.onClick() : setActiveTab(item.id as any)}
               title={!isSidebarOpen ? item.label : ''}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === item.id ? 'bg-primary/10 text-primary font-medium' : 'text-gray-500 hover:bg-gray-50'} ${!isSidebarOpen && 'justify-center px-0'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === item.id ? 'bg-primary/10 text-primary font-bold border-r-4 border-primary' : 'text-gray-500 hover:bg-gray-50'} ${!isSidebarOpen && 'justify-center px-0'}`}
             >
               <item.icon size={20} />
               {isSidebarOpen && <span className="font-bold">{item.label}</span>}
@@ -1294,76 +1363,81 @@ const ShahwilayatApp = () => {
                 <div className="space-y-8">
                   {/* Debit Card Style Balance Card */}
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    <div className="lg:col-span-2 bg-gradient-to-br from-primary via-accent to-black p-8 rounded-[3rem] text-white shadow-2xl shadow-primary/20 relative overflow-hidden aspect-[1.586/1] flex flex-col justify-between">
-                      <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full -mr-40 -mt-40 blur-3xl" />
-                      <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-400/20 rounded-full -ml-32 -mb-32 blur-2xl" />
+                    <motion.div 
+                      initial={{ scale: 0.95, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      className="lg:col-span-2 bg-gradient-to-br from-primary via-accent to-black p-8 rounded-[3rem] text-white shadow-2xl shadow-primary/30 relative overflow-hidden aspect-[1.586/1] flex flex-col justify-between group"
+                    >
+                      <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full -mr-48 -mt-48 blur-3xl group-hover:bg-white/20 transition-all duration-700" />
+                      <div className="absolute bottom-0 left-0 w-80 h-80 bg-indigo-400/20 rounded-full -ml-40 -mb-40 blur-2xl group-hover:bg-indigo-400/30 transition-all duration-700" />
                       
                       <div className="relative z-10 flex justify-between items-start">
                         <div>
-                          <p className="text-indigo-100 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">Shahwilayat Public School</p>
-                          <h2 className="text-xl font-black tracking-tight">STUDENT DEBIT CARD</h2>
+                          <p className="text-indigo-100 text-[10px] font-black uppercase tracking-[0.3em] mb-1">Shahwilayat Public School</p>
+                          <h2 className="text-2xl font-black tracking-tight">STUDENT SMART CARD</h2>
                         </div>
-                        <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-xl border border-white/20">
-                          <Globe size={24} className="text-indigo-100" />
+                        <div className="bg-white/20 p-4 rounded-2xl backdrop-blur-xl border border-white/20 shadow-inner">
+                          <Globe size={28} className="text-indigo-100 animate-pulse" />
                         </div>
                       </div>
 
                       <div className="relative z-10">
-                        <div className="flex items-center gap-4 mb-8">
-                          <div className="w-12 h-10 bg-gradient-to-br from-amber-400 to-amber-600 rounded-lg shadow-inner border border-amber-300/30" />
-                          <div className="flex gap-4 text-2xl font-mono tracking-[0.2em] text-indigo-50">
+                        <div className="flex items-center gap-6 mb-10">
+                          <div className="w-14 h-11 bg-gradient-to-br from-amber-300 via-amber-500 to-amber-700 rounded-lg shadow-inner border border-amber-200/40 relative overflow-hidden">
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -skew-x-12 translate-x-[-100%] animate-[shimmer_2s_infinite]" />
+                          </div>
+                          <div className="flex gap-6 text-3xl font-mono tracking-[0.25em] text-indigo-50 drop-shadow-lg">
                             <span>{selectedStudent?.roll_no?.substring(0, 4) || '0000'}</span>
                             <span>{selectedStudent?.roll_no?.substring(4, 8) || '0000'}</span>
                             <span>{selectedStudent?.roll_no?.substring(8, 12) || '0000'}</span>
-                            <span>{selectedStudent?.roll_no?.substring(12) || '0000'}</span>
                           </div>
                         </div>
 
                         <div className="flex justify-between items-end">
                           <div>
-                            <p className="text-[10px] text-indigo-200 uppercase font-black tracking-wider mb-1">Card Holder</p>
-                            <p className="text-lg font-black tracking-tight uppercase">{selectedStudent?.name}</p>
+                            <p className="text-[10px] text-indigo-200 uppercase font-black tracking-widest mb-1 opacity-80">Card Holder</p>
+                            <p className="text-xl font-black tracking-tight uppercase drop-shadow-md">{selectedStudent?.name}</p>
                           </div>
                           <div className="text-right">
-                            <p className="text-[10px] text-indigo-200 uppercase font-black tracking-wider mb-1">Current Balance</p>
-                            <p className="text-2xl font-black">Rs. {selectedStudent?.balance?.toLocaleString()}</p>
+                            <p className="text-[10px] text-indigo-200 uppercase font-black tracking-widest mb-1 opacity-80">Current Balance</p>
+                            <p className="text-3xl font-black drop-shadow-lg">Rs. {selectedStudent?.balance?.toLocaleString()}</p>
                           </div>
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
 
-                    <div className="bg-white p-8 rounded-[3rem] border border-gray-100 shadow-sm flex flex-col justify-center items-center text-center">
-                      <div className="w-20 h-20 bg-primary/10 text-primary rounded-3xl flex items-center justify-center mb-4 shadow-sm">
-                        <Wallet size={40} />
+                    <motion.div 
+                      initial={{ x: 20, opacity: 0 }}
+                      animate={{ x: 0, opacity: 1 }}
+                      className="bg-white p-8 rounded-[3rem] border border-gray-100 shadow-xl shadow-slate-200/50 flex flex-col justify-center items-center text-center relative overflow-hidden"
+                    >
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full -mr-12 -mt-12" />
+                      <div className="w-24 h-24 bg-gradient-to-br from-primary/10 to-accent/10 text-primary rounded-[2rem] flex items-center justify-center mb-6 shadow-inner">
+                        <Wallet size={48} />
                       </div>
-                      <h3 className="text-xl font-bold text-gray-900 mb-2">Wallet Status</h3>
-                      <div className="flex items-center gap-2 text-emerald-600 font-bold text-sm mb-6">
+                      <h3 className="text-2xl font-black text-gray-900 mb-2 tracking-tight">Wallet Status</h3>
+                      <div className="flex items-center gap-2 text-emerald-600 font-black text-xs mb-8 bg-emerald-50 px-4 py-2 rounded-full">
                         <CheckCircle2 size={16} />
-                        Active & Verified
+                        ACTIVE & VERIFIED
                       </div>
-                      <div className="w-full space-y-3">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-500 font-medium">Roll Number</span>
-                          <span className="text-gray-900 font-bold">{selectedStudent?.roll_no}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-500 font-medium">Computer ID</span>
-                          <span className="text-gray-900 font-bold">{selectedStudent?.computer_number || 'N/A'}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-500 font-medium">Class</span>
-                          <span className="text-gray-900 font-bold">{selectedStudent?.class}-{selectedStudent?.section}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-500 font-medium">Attendance</span>
-                          <span className="text-gray-900 font-bold">{selectedStudent?.attendance_percentage?.toFixed(1)}%</span>
-                        </div>
+                      <div className="w-full space-y-4">
+                        {[
+                          { label: 'Roll Number', value: selectedStudent?.roll_no },
+                          { label: 'Computer ID', value: selectedStudent?.computer_number || 'N/A' },
+                          { label: 'Class', value: `${selectedStudent?.class}-${selectedStudent?.section}` },
+                          { label: 'Attendance', value: `${selectedStudent?.attendance_percentage?.toFixed(1)}%`, color: 'text-primary' },
+                        ].map((row, idx) => (
+                          <div key={idx} className="flex justify-between items-center text-sm p-3 bg-gray-50 rounded-2xl">
+                            <span className="text-gray-500 font-bold">{row.label}</span>
+                            <span className={`font-black ${row.color || 'text-gray-900'}`}>{row.value}</span>
+                          </div>
+                        ))}
                       </div>
-                    </div>
+                    </motion.div>
                   </div>
 
                   {/* Quick Actions Grid */}
-                  <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-9 gap-4">
+                  <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-9 gap-6">
                     {[
                       { label: 'Notices', icon: Megaphone, color: 'bg-blue-50 text-blue-600', tab: 'news' },
                       { label: 'Canteen', icon: Coffee, color: 'bg-orange-50 text-orange-600', tab: 'dashboard' },
@@ -1377,15 +1451,19 @@ const ShahwilayatApp = () => {
                     ].map((item, i) => (
                       <motion.button
                         key={item.tab}
-                        whileHover={{ y: -5, scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
+                        initial={{ y: 20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: i * 0.05 }}
+                        whileHover={{ y: -8, scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
                         onClick={() => item.tab && setActiveTab(item.tab as any)}
-                        className="flex flex-col items-center gap-2 group"
+                        className="flex flex-col items-center gap-3 group"
                       >
-                        <div className={`w-14 h-14 md:w-16 md:h-16 rounded-2xl ${item.color} flex items-center justify-center shadow-sm group-hover:shadow-md transition-all`}>
-                          <item.icon size={24} md:size={28} strokeWidth={2} />
+                        <div className={`w-16 h-16 md:w-20 md:h-20 rounded-3xl ${item.color} flex items-center justify-center shadow-lg shadow-black/5 group-hover:shadow-xl transition-all relative overflow-hidden`}>
+                          <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+                          <item.icon size={28} md:size={32} strokeWidth={2.5} className="relative z-10" />
                         </div>
-                        <span className="text-[10px] md:text-xs font-bold text-gray-600 text-center">{item.label}</span>
+                        <span className="text-[10px] md:text-xs font-black text-gray-700 text-center uppercase tracking-tighter">{item.label}</span>
                       </motion.button>
                     ))}
                   </div>
@@ -1511,77 +1589,91 @@ const ShahwilayatApp = () => {
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                         {[
-                          { label: 'Total Students', value: stats.totalStudents, icon: Users, color: 'bg-blue-50 text-blue-600' },
-                          { label: 'Total Balance', value: `Rs. ${stats.totalBalance?.toLocaleString() ?? '0'}`, icon: Wallet, color: 'bg-emerald-50 text-emerald-600' },
-                          { label: 'Pending Fees', value: 'Rs. 45,000', icon: History, color: 'bg-red-50 text-red-600' },
-                          { label: 'News Items', value: announcements.length, icon: Megaphone, color: 'bg-purple-50 text-purple-600' },
+                          { label: 'Total Students', value: stats.totalStudents, icon: Users, color: 'from-blue-500 to-indigo-600', shadow: 'shadow-blue-500/20' },
+                          { label: 'Total Balance', value: `Rs. ${stats.totalBalance?.toLocaleString() ?? '0'}`, icon: Wallet, color: 'from-emerald-500 to-teal-600', shadow: 'shadow-emerald-500/20' },
+                          { label: 'Outstanding Fees', value: `Rs. ${Math.abs(students.reduce((sum, s) => sum + (s.balance < 0 ? s.balance : 0), 0)).toLocaleString()}`, icon: History, color: 'from-rose-500 to-red-600', shadow: 'shadow-rose-500/20' },
+                          { label: 'News Items', value: announcements.length, icon: Megaphone, color: 'from-purple-500 to-violet-600', shadow: 'shadow-purple-500/20' },
                         ].map((stat, i) => (
                           <motion.div 
                             key={stat.label}
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: i * 0.1 }}
-                            className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm"
+                            whileHover={{ y: -5 }}
+                            className={`bg-gradient-to-br ${stat.color} p-6 rounded-[2rem] text-white shadow-xl ${stat.shadow} relative overflow-hidden group`}
                           >
-                            <div className="flex justify-between items-start mb-4">
-                              <div className={`p-3 rounded-xl ${stat.color}`}>
+                            <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12 group-hover:scale-150 transition-transform duration-700" />
+                            <div className="flex justify-between items-start mb-4 relative z-10">
+                              <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-md">
                                 <stat.icon size={24} />
                               </div>
                             </div>
-                            <p className="text-gray-500 text-sm font-medium">{stat.label}</p>
-                            <h3 className="text-2xl font-bold text-gray-900 mt-1">{stat.value}</h3>
+                            <p className="text-white/80 text-xs font-black uppercase tracking-widest mb-1 relative z-10">{stat.label}</p>
+                            <h3 className="text-2xl font-black relative z-10">{stat.value}</h3>
                           </motion.div>
                         ))}
                       </div>
 
                       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
-                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                          <div className="flex justify-between items-center mb-6">
-                            <h3 className="font-bold text-gray-900">Recent Transactions</h3>
-                            <button onClick={() => setActiveTab('finance')} className="text-indigo-600 text-xs font-bold hover:underline">View All</button>
+                        <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-xl shadow-slate-200/50">
+                          <div className="flex justify-between items-center mb-8">
+                            <h3 className="text-xl font-black text-gray-900">Recent Transactions</h3>
+                            <button onClick={() => setActiveTab('finance')} className="text-primary text-xs font-black uppercase tracking-widest hover:underline">View All</button>
                           </div>
                           <div className="space-y-4">
                             {stats.recentTransactions.slice(0, 5).map((tx) => (
-                              <div key={`${tx.id}-${tx.date}`} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                                <div className="flex items-center gap-3">
-                                  <div className={`p-2 rounded-lg ${tx.type === 'credit' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
-                                    {tx.type === 'credit' ? <ArrowUpRight size={16} /> : <ArrowDownLeft size={16} />}
+                              <div key={`${tx.id}-${tx.date}`} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl group hover:bg-white hover:shadow-lg transition-all border border-transparent hover:border-gray-100">
+                                <div className="flex items-center gap-4">
+                                  <div className={`p-3 rounded-xl ${tx.type === 'credit' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                                    {tx.type === 'credit' ? <ArrowUpRight size={20} /> : <ArrowDownLeft size={20} />}
                                   </div>
                                   <div>
-                                    <p className="text-sm font-medium text-gray-900">{tx.student_name}</p>
-                                    <p className="text-xs text-gray-500">{new Date(tx.date).toLocaleDateString()}</p>
+                                    <p className="text-sm font-black text-gray-900">{tx.student_name}</p>
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase">{new Date(tx.date).toLocaleDateString()}</p>
                                   </div>
                                 </div>
-                                <span className={`font-bold text-sm ${tx.type === 'credit' ? 'text-emerald-600' : 'text-red-600'}`}>
+                                <span className={`font-black text-sm ${tx.type === 'credit' ? 'text-emerald-600' : 'text-rose-600'}`}>
                                   {tx.type === 'credit' ? '+' : '-'} Rs. {tx.amount?.toLocaleString() ?? '0'}
                                 </span>
                               </div>
                             ))}
-                            {stats.recentTransactions.length === 0 && <p className="text-center text-gray-400 py-4">No recent transactions</p>}
+                            {stats.recentTransactions.length === 0 && (
+                              <div className="text-center py-12">
+                                <History className="mx-auto text-gray-200 mb-4" size={48} />
+                                <p className="text-gray-400 font-bold">No recent transactions</p>
+                              </div>
+                            )}
                           </div>
                         </div>
 
-                        <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                          <div className="flex justify-between items-center mb-6">
-                            <h3 className="font-bold text-gray-900">Upcoming Classes</h3>
-                            <button onClick={() => setActiveTab('online')} className="text-primary text-xs font-bold hover:underline">View All</button>
+                        <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-xl shadow-slate-200/50">
+                          <div className="flex justify-between items-center mb-8">
+                            <h3 className="text-xl font-black text-gray-900">Upcoming Classes</h3>
+                            <button onClick={() => setActiveTab('online')} className="text-primary text-xs font-black uppercase tracking-widest hover:underline">View All</button>
                           </div>
                           <div className="space-y-4">
                             {onlineClasses.slice(0, 5).map((oc) => (
-                              <div key={oc.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                                <div className="flex items-center gap-3">
-                                  <div className="p-2 bg-primary/20 text-primary rounded-lg">
-                                    <Video size={16} />
+                              <div key={oc.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl group hover:bg-white hover:shadow-lg transition-all border border-transparent hover:border-gray-100">
+                                <div className="flex items-center gap-4">
+                                  <div className="p-3 bg-primary/10 text-primary rounded-xl">
+                                    <Video size={20} />
                                   </div>
                                   <div>
-                                    <p className="text-sm font-medium text-gray-900">{oc.subject}</p>
-                                    <p className="text-xs text-gray-500">Grade {oc.grade} • {new Date(oc.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                    <p className="text-sm font-black text-gray-900">{oc.subject}</p>
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase">Grade {oc.grade} • {new Date(oc.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                                   </div>
                                 </div>
-                                <a href={oc.link} target="_blank" rel="noopener noreferrer" className="text-primary text-xs font-bold hover:underline">JOIN</a>
+                                <a href={oc.link} target="_blank" rel="noopener noreferrer" className="p-2 bg-primary text-white rounded-lg hover:scale-110 transition-transform">
+                                  <ExternalLink size={16} />
+                                </a>
                               </div>
                             ))}
-                            {onlineClasses.length === 0 && <p className="text-center text-gray-400 py-4">No classes scheduled</p>}
+                            {onlineClasses.length === 0 && (
+                              <div className="text-center py-12">
+                                <Video className="mx-auto text-gray-200 mb-4" size={48} />
+                                <p className="text-gray-400 font-bold">No classes scheduled</p>
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -1641,78 +1733,109 @@ const ShahwilayatApp = () => {
                     </div>
                   )}
                   {user.role === 'guest' && (
-                    <div className="space-y-8">
+                    <div className="space-y-12">
                       <motion.div 
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="bg-gradient-to-r from-primary to-accent p-8 rounded-[3rem] text-white shadow-2xl shadow-primary/20 relative overflow-hidden"
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="bg-gradient-to-br from-primary via-accent to-secondary p-12 rounded-[4rem] text-white shadow-2xl shadow-primary/30 relative overflow-hidden"
                       >
-                        <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full -mr-40 -mt-40 blur-3xl" />
-                        <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-400/20 rounded-full -ml-32 -mb-32 blur-2xl" />
+                        <div className="absolute top-0 right-0 w-[40rem] h-[40rem] bg-white/10 rounded-full -mr-80 -mt-80 blur-[100px] animate-pulse" />
+                        <div className="absolute bottom-0 left-0 w-96 h-96 bg-indigo-400/20 rounded-full -ml-48 -mb-48 blur-[80px]" />
                         
-                        <div className="relative z-10">
-                          <h2 className="text-4xl font-black tracking-tight mb-4">Welcome to Shahwilayat Public School</h2>
-                          <p className="text-indigo-100 text-lg max-w-2xl leading-relaxed mb-8">
-                            Explore our public portal to stay updated with the latest news, upcoming events, and learn more about our institution.
-                          </p>
+                        <div className="relative z-10 text-center lg:text-left">
+                          <motion.span 
+                            initial={{ y: 20, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={{ delay: 0.2 }}
+                            className="inline-block px-4 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-black uppercase tracking-[0.3em] mb-6 border border-white/20"
+                          >
+                            Welcome to the Future of Education
+                          </motion.span>
+                          <motion.h2 
+                            initial={{ y: 20, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={{ delay: 0.3 }}
+                            className="text-5xl lg:text-7xl font-black tracking-tighter mb-8 leading-[0.9]"
+                          >
+                            Shahwilayat <br /> Public School
+                          </motion.h2>
+                          <motion.p 
+                            initial={{ y: 20, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={{ delay: 0.4 }}
+                            className="text-indigo-50 text-xl max-w-2xl leading-relaxed mb-12 font-medium opacity-90"
+                          >
+                            Step into our digital portal. Stay updated with real-time news, upcoming events, and explore our academic excellence.
+                          </motion.p>
                           
-                          <div className="flex flex-wrap gap-4">
-                            <button onClick={() => setActiveTab('events')} className="bg-white text-primary px-6 py-3 rounded-xl font-bold hover:bg-indigo-50 transition-colors shadow-lg">
-                              View Events
+                          <motion.div 
+                            initial={{ y: 20, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={{ delay: 0.5 }}
+                            className="flex flex-wrap justify-center lg:justify-start gap-6"
+                          >
+                            <button onClick={() => setActiveTab('events')} className="bg-white text-primary px-10 py-5 rounded-[2rem] font-black uppercase tracking-widest hover:scale-110 transition-all shadow-2xl shadow-black/20">
+                              Explore Events
                             </button>
-                            <button onClick={() => setActiveTab('news')} className="bg-white/20 text-white px-6 py-3 rounded-xl font-bold hover:bg-white/30 transition-colors backdrop-blur-md border border-white/20">
-                              Read News
+                            <button onClick={() => setActiveTab('news')} className="bg-white/10 text-white px-10 py-5 rounded-[2rem] font-black uppercase tracking-widest hover:bg-white/20 transition-all backdrop-blur-xl border border-white/20">
+                              Latest News
                             </button>
-                            <button onClick={() => setActiveTab('schedules')} className="bg-white/20 text-white px-6 py-3 rounded-xl font-bold hover:bg-white/30 transition-colors backdrop-blur-md border border-white/20">
-                              Class Schedules
-                            </button>
-                            <button onClick={() => setActiveTab('datesheets')} className="bg-white/20 text-white px-6 py-3 rounded-xl font-bold hover:bg-white/30 transition-colors backdrop-blur-md border border-white/20">
-                              Exam Datesheets
-                            </button>
-                          </div>
+                          </motion.div>
                         </div>
                       </motion.div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
-                          <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-6">
-                            <Megaphone size={32} />
-                          </div>
-                          <h3 className="text-2xl font-bold text-gray-900 mb-4">Latest Announcements</h3>
-                          <div className="space-y-4">
-                            {announcements.slice(0, 3).map((ann) => (
-                              <div key={ann.id} className="p-4 bg-gray-50 rounded-xl">
-                                <p className="text-sm font-bold text-gray-900">{ann.title}</p>
-                                <p className="text-xs text-gray-500 mt-1 line-clamp-2">{ann.content}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        {[
+                          { title: 'Academic Calendar', desc: 'View important dates and schedules.', icon: Calendar, color: 'bg-blue-500', tab: 'schedules' },
+                          { title: 'Exam Portal', desc: 'Check datesheets and result updates.', icon: Award, color: 'bg-rose-500', tab: 'datesheets' },
+                          { title: 'Public Notices', desc: 'Stay informed with school announcements.', icon: Megaphone, color: 'bg-amber-500', tab: 'news' },
+                        ].map((feature, i) => (
+                          <motion.div
+                            key={feature.title}
+                            initial={{ opacity: 0, y: 30 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.6 + (i * 0.1) }}
+                            whileHover={{ y: -10 }}
+                            onClick={() => feature.tab && setActiveTab(feature.tab as any)}
+                            className="bg-white p-10 rounded-[3rem] border border-gray-100 shadow-xl shadow-slate-200/50 cursor-pointer group"
+                          >
+                            <div className={`w-20 h-20 ${feature.color} text-white rounded-[2rem] flex items-center justify-center mb-8 shadow-lg group-hover:scale-110 transition-transform`}>
+                              <feature.icon size={36} />
+                            </div>
+                            <h3 className="text-2xl font-black text-gray-900 mb-4 tracking-tight">{feature.title}</h3>
+                            <p className="text-gray-500 font-medium leading-relaxed">{feature.desc}</p>
+                          </motion.div>
+                        ))}
+                      </div>
 
-                        <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
-                          <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mb-6">
-                            <Globe size={32} />
-                          </div>
-                          <h3 className="text-2xl font-bold text-gray-900 mb-4">Share Portal</h3>
-                          <p className="text-gray-600 mb-6">Share this portal with other parents, students, or staff members.</p>
-                          <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-xl border border-gray-200">
+                      <div className="bg-white p-12 rounded-[4rem] border border-gray-100 shadow-2xl shadow-slate-200/50 flex flex-col lg:flex-row items-center gap-12">
+                        <div className="flex-1 text-center lg:text-left">
+                          <h3 className="text-4xl font-black text-gray-900 mb-4 tracking-tighter">Join Our Community</h3>
+                          <p className="text-gray-500 text-lg font-medium mb-8">Share this portal with parents and students to keep everyone connected.</p>
+                          <div className="flex items-center gap-4 bg-gray-50 p-4 rounded-[2rem] border border-gray-200">
                             <input 
                               type="text" 
                               readOnly 
                               value={window.location.href} 
-                              className="bg-transparent text-sm text-gray-600 w-full outline-none px-2 font-mono truncate"
+                              className="bg-transparent text-sm text-gray-600 w-full outline-none px-4 font-mono truncate font-bold"
                             />
                             <button 
                               onClick={() => {
                                 navigator.clipboard.writeText(window.location.href);
                                 showToast('Link copied to clipboard!');
                               }}
-                              className="p-2 bg-white rounded-lg text-primary hover:bg-indigo-50 transition-colors shadow-sm border border-gray-100"
+                              className="p-4 bg-primary text-white rounded-2xl hover:scale-110 transition-transform shadow-lg shadow-primary/30"
                               title="Copy Link"
                             >
-                              <Copy size={18} />
+                              <Copy size={24} />
                             </button>
                           </div>
+                        </div>
+                        <div className="w-full lg:w-1/3 aspect-square bg-gradient-to-br from-primary/5 to-accent/5 rounded-[3rem] flex items-center justify-center relative overflow-hidden">
+                          <div className="absolute inset-0 flex items-center justify-center opacity-10">
+                            <Logo className="w-64 h-64" />
+                          </div>
+                          <QrCode size={120} className="text-primary relative z-10" />
                         </div>
                       </div>
                     </div>
@@ -2843,6 +2966,155 @@ const ShahwilayatApp = () => {
           </>
         )}
 
+        {activeTab === 'fees' && user.role === 'admin' && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-3xl font-black text-gray-900 tracking-tight">Fee Management</h2>
+                <p className="text-gray-500">Define structures, track payments, and send reminders.</p>
+              </div>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => handleSendFeeReminders()}
+                  className="flex items-center gap-2 bg-warning text-white px-6 py-3 rounded-2xl font-bold hover:opacity-90 transition-all shadow-lg shadow-warning/30"
+                >
+                  <Bell size={20} />
+                  Send All Reminders
+                </button>
+                <button 
+                  onClick={() => setShowAddFeeStructure(true)}
+                  className="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-2xl font-bold hover:opacity-90 transition-all shadow-lg shadow-primary/30"
+                >
+                  <Plus size={20} />
+                  Add Fee Structure
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 space-y-6">
+                <div className="bg-white rounded-3xl border border-gray-100 shadow-xl p-6">
+                  <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                    <FileText className="text-primary" />
+                    Fee Structures
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="text-left border-b border-gray-100">
+                          <th className="pb-4 font-bold text-gray-600">Grade</th>
+                          <th className="pb-4 font-bold text-gray-600">Amount</th>
+                          <th className="pb-4 font-bold text-gray-600">Frequency</th>
+                          <th className="pb-4 font-bold text-gray-600">Description</th>
+                          <th className="pb-4 font-bold text-gray-600 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {feeStructures.map((fee) => (
+                          <tr key={fee.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="py-4 font-medium">{fee.grade}</td>
+                            <td className="py-4 text-primary font-bold">Rs. {fee.amount}</td>
+                            <td className="py-4">
+                              <span className="px-3 py-1 bg-secondary/10 text-secondary rounded-full text-xs font-bold uppercase">
+                                {fee.frequency}
+                              </span>
+                            </td>
+                            <td className="py-4 text-gray-500 text-sm">{fee.description}</td>
+                            <td className="py-4 text-right">
+                              <button 
+                                onClick={() => handleDeleteFeeStructure(fee.id)}
+                                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                        {feeStructures.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="py-8 text-center text-gray-400">No fee structures defined yet.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-3xl border border-gray-100 shadow-xl p-6">
+                  <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                    <History className="text-success" />
+                    Recent Fee Payments
+                  </h3>
+                  <div className="space-y-4">
+                    {transactions.filter(t => t.type === 'fee').slice(0, 10).map((t) => {
+                      const student = students.find(s => s.id === t.student_id);
+                      return (
+                        <div key={t.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl hover:bg-gray-100 transition-all group">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-sm">
+                              <UserIcon size={24} className="text-gray-400" />
+                            </div>
+                            <div>
+                              <p className="font-bold text-gray-900">{student?.name || 'Unknown Student'}</p>
+                              <p className="text-xs text-gray-500">{new Date(t.date).toLocaleDateString()} • {t.fee_type}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <div className="text-right">
+                              <p className="font-black text-success">Rs. {t.amount}</p>
+                              <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Paid</p>
+                            </div>
+                            <button 
+                              onClick={() => setShowReceipt(t)}
+                              className="p-2 bg-white text-primary rounded-lg shadow-sm opacity-0 group-hover:opacity-100 transition-all"
+                              title="View Receipt"
+                            >
+                              <Printer size={18} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="bg-gradient-to-br from-primary to-accent rounded-3xl p-6 text-white shadow-xl shadow-primary/20">
+                  <h3 className="text-xl font-bold mb-4">Quick Stats</h3>
+                  <div className="space-y-4">
+                    <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm">
+                      <p className="text-white/70 text-sm">Total Fees Collected</p>
+                      <p className="text-2xl font-black">Rs. {transactions.filter(t => t.type === 'fee').reduce((sum, t) => sum + t.amount, 0).toLocaleString()}</p>
+                    </div>
+                    <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm">
+                      <p className="text-white/70 text-sm">Outstanding Balance</p>
+                      <p className="text-2xl font-black">Rs. {Math.abs(students.reduce((sum, s) => sum + (s.balance < 0 ? s.balance : 0), 0)).toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-3xl border border-gray-100 shadow-xl p-6">
+                  <h3 className="text-xl font-bold mb-4">Send Reminders</h3>
+                  <p className="text-sm text-gray-500 mb-4">Send automated reminders to parents with outstanding balances.</p>
+                  <div className="space-y-3">
+                    {['Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10'].map(grade => (
+                      <button 
+                        key={grade}
+                        onClick={() => handleSendFeeReminders(grade)}
+                        className="w-full flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-primary/5 hover:text-primary transition-all group"
+                      >
+                        <span className="font-medium">{grade}</span>
+                        <ChevronRight size={16} className="text-gray-400 group-hover:text-primary" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
         {activeTab === 'finance' && (
           <div className="space-y-6">
             {user.role === 'admin' ? (
@@ -3090,6 +3362,135 @@ const ShahwilayatApp = () => {
 
       {/* Modals */}
       <AnimatePresence>
+        {showAddFeeStructure && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-black text-gray-900">Add Fee Structure</h3>
+                <button onClick={() => setShowAddFeeStructure(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                  <X size={24} />
+                </button>
+              </div>
+              <form onSubmit={handleAddFeeStructure} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Grade</label>
+                  <input 
+                    type="text" 
+                    required 
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                    value={newFeeStructure.grade}
+                    onChange={(e) => setNewFeeStructure({...newFeeStructure, grade: e.target.value})}
+                    placeholder="e.g. Grade 1"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Amount (Rs.)</label>
+                  <input 
+                    type="number" 
+                    required 
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                    value={newFeeStructure.amount}
+                    onChange={(e) => setNewFeeStructure({...newFeeStructure, amount: e.target.value})}
+                    placeholder="e.g. 5000"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Frequency</label>
+                  <select 
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                    value={newFeeStructure.frequency}
+                    onChange={(e) => setNewFeeStructure({...newFeeStructure, frequency: e.target.value})}
+                  >
+                    <option value="Monthly">Monthly</option>
+                    <option value="Quarterly">Quarterly</option>
+                    <option value="Yearly">Yearly</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Description</label>
+                  <textarea 
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all h-24 resize-none"
+                    value={newFeeStructure.description}
+                    onChange={(e) => setNewFeeStructure({...newFeeStructure, description: e.target.value})}
+                    placeholder="Optional details..."
+                  />
+                </div>
+                <button type="submit" className="w-full bg-primary text-white py-4 rounded-2xl font-bold hover:opacity-90 transition-all shadow-lg shadow-primary/30 mt-4">
+                  Save Fee Structure
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {showReceipt && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-3xl p-8 max-w-lg w-full shadow-2xl overflow-hidden relative">
+              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-primary via-accent to-secondary"></div>
+              <div className="flex justify-between items-start mb-8">
+                <div className="flex items-center gap-3">
+                  <Logo className="w-10 h-10" />
+                  <div>
+                    <h3 className="text-xl font-black text-gray-900">Fee Receipt</h3>
+                    <p className="text-xs text-gray-500 uppercase tracking-widest font-bold">Shahwilayat Public School</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowReceipt(null)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="flex justify-between p-4 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                  <div>
+                    <p className="text-[10px] text-gray-400 uppercase font-black tracking-wider mb-1">Receipt No.</p>
+                    <p className="font-mono font-bold">#REC-{showReceipt.id.toString().padStart(6, '0')}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] text-gray-400 uppercase font-black tracking-wider mb-1">Date</p>
+                    <p className="font-bold">{new Date(showReceipt.date).toLocaleDateString()}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Student Name</span>
+                    <span className="font-bold text-gray-900">{students.find(s => s.id === showReceipt.student_id)?.name || 'Unknown'}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Grade/Class</span>
+                    <span className="font-bold text-gray-900">{students.find(s => s.id === showReceipt.student_id)?.grade || 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Fee Type</span>
+                    <span className="px-3 py-1 bg-primary/10 text-primary rounded-full text-xs font-bold">{showReceipt.fee_type || 'General Fee'}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Description</span>
+                    <span className="text-gray-900">{showReceipt.description || 'Monthly Tuition Fee'}</span>
+                  </div>
+                </div>
+
+                <div className="pt-6 border-t border-gray-100">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-lg font-bold text-gray-900">Total Amount Paid</span>
+                    <span className="text-2xl font-black text-success">Rs. {showReceipt.amount}</span>
+                  </div>
+                  <p className="text-[10px] text-gray-400 text-center mt-8 italic">This is a computer-generated receipt and does not require a signature.</p>
+                </div>
+
+                <button 
+                  onClick={() => window.print()}
+                  className="w-full flex items-center justify-center gap-2 bg-gray-900 text-white py-4 rounded-2xl font-bold hover:bg-gray-800 transition-all mt-4"
+                >
+                  <Printer size={20} />
+                  Print Receipt
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
         {showAddStudent && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <motion.div 
