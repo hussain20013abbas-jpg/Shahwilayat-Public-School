@@ -1,5 +1,4 @@
 {
   "name": "Shahwilayat Public School",
   "description": "A comprehensive school management system with student financial tracking and administrative tools.",
-  "requestFramePermissions": ["camera", "microphone"]
 }

@@ -298,6 +298,13 @@ try {
   console.error('Migration error:', err);
 }
 
+try {
+  const annCols = db.prepare("PRAGMA table_info(announcements)").all().map((c: any) => c.name);
+  if (!annCols.includes('target_role')) {
+    db.exec("ALTER TABLE announcements ADD COLUMN target_role TEXT DEFAULT 'all'");
+  }
+} catch (e) {}
+
 // Debug: Check if default admin exists
 try {
   const admin = db.prepare("SELECT * FROM admins WHERE username = 'admin'").get();
@@ -309,7 +316,7 @@ try {
   console.error('Error checking default admin:', e);
 }
 
-const app = express();
+export const app = express();
 
 async function startServer() {
   const PORT = 3000;
