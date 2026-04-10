@@ -91,14 +91,17 @@ const LoadingSpinner = () => (
 
 const ShahwilayatApp = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'students' | 'finance' | 'fees' | 'canteen' | 'news' | 'mail' | 'syllabus' | 'schedules' | 'online' | 'attendance' | 'homework' | 'datesheets' | 'results' | 'about' | 'admins' | 'profile' | 'ai' | 'events'>('dashboard');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [showLaunchpad, setShowLaunchpad] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [loginForm, setLoginForm] = useState({ username: '', password: '', email: '' });
   const [loginError, setLoginError] = useState('');
+  const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
   const [multipleProfiles, setMultipleProfiles] = useState<any[] | null>(null);
   const [serverStatus, setServerStatus] = useState<'online' | 'offline' | 'checking'>('checking');
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
+  const [teachers, setTeachers] = useState<any[]>([]);
   const [admins, setAdmins] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [syllabus, setSyllabus] = useState<Syllabus[]>([]);
@@ -149,7 +152,7 @@ const ShahwilayatApp = () => {
   const [newSyllabus, setNewSyllabus] = useState({ subject: '', grade: '', content: '', file_url: '' });
   const [newSchedule, setNewSchedule] = useState({ grade: '', day: 'Monday', time_slot: '', subject: '', teacher: '', location: '', is_weekend: false });
   const [newOnlineClass, setNewOnlineClass] = useState({ grade: '', subject: '', link: '', time: '' });
-  const [newAdmin, setNewAdmin] = useState({ name: '', username: '', password: '', role: 'admin' });
+  const [newAdmin, setNewAdmin] = useState<{name: string, username: string, password: string, role: string, student_id?: number, teacher_id?: number}>({ name: '', username: '', password: '', role: 'admin' });
   const [newFeeStructure, setNewFeeStructure] = useState({ grade: '', amount: '', frequency: 'Monthly', description: '' });
   const [resetForm, setResetForm] = useState({ type: 'student' as 'student' | 'admin' | 'canteen', identifier: '', verification: '', new_password: '' });
   const [resetMessage, setResetMessage] = useState({ text: '', type: 'success' as 'success' | 'error' });
@@ -263,36 +266,18 @@ const ShahwilayatApp = () => {
     const username = loginForm.username.trim();
     const password = loginForm.password.trim();
 
-    let type = 'student';
-    let payloadUsername = username;
-    let payloadPassword = password;
-
-    // Special handling for common admin/canteen credentials
-    if (username.toLowerCase() === 'admin' && (password.toLowerCase() === 'admin 123' || password === 'admin123')) {
-      type = 'admin';
-      payloadUsername = 'admin';
-      payloadPassword = 'admin123';
-    } else if (username.toLowerCase() === 'canteen' && (password.toLowerCase() === 'canteen 123' || password === 'canteen123')) {
-      type = 'canteen';
-      payloadUsername = 'canteen';
-      payloadPassword = 'canteen123';
-    }
-
     try {
       const res = await fetch(`${BASE_URL}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: payloadUsername, password: payloadPassword, type })
+        body: JSON.stringify({ username, password })
       });
       
       if (res.ok) {
         const userData = await res.json();
-        if (userData.multiple) {
-          setMultipleProfiles(userData.profiles);
-          return;
-        }
         setUser(userData);
         localStorage.setItem('swps_user', JSON.stringify(userData));
+        setShowLaunchpad(true);
         if (userData.role === 'student' && userData.student_id) {
           fetchStudentDetails(userData.student_id);
         }
@@ -310,23 +295,6 @@ const ShahwilayatApp = () => {
       console.error('Login error:', error);
       setLoginError('Connection error. The server might be offline or starting up. Please wait a moment and try again.');
     }
-  };
-
-  const handleSelectProfile = (profile: any) => {
-    const userData = { 
-      id: profile.id, 
-      name: profile.name, 
-      role: 'student', 
-      student_id: profile.id,
-      grade: profile.grade,
-      class: profile.class,
-      section: profile.section,
-      balance: profile.balance
-    };
-    setUser(userData);
-    localStorage.setItem('swps_user', JSON.stringify(userData));
-    fetchStudentDetails(profile.id);
-    setMultipleProfiles(null);
   };
 
   const downloadStatement = () => {
@@ -401,6 +369,7 @@ const ShahwilayatApp = () => {
         { key: 'datesheets', url: `${BASE_URL}/api/datesheets` },
         { key: 'transactions', url: `${BASE_URL}/api/transactions` },
         { key: 'admins', url: `${BASE_URL}/api/admins` },
+        { key: 'teachers', url: `${BASE_URL}/api/teachers` },
         { key: 'messages', url: `${BASE_URL}/api/messages?userId=${user?.id}&role=${user?.role}` },
         { key: 'feeStructures', url: `${BASE_URL}/api/fee-structures` }
       ];
@@ -428,8 +397,9 @@ const ShahwilayatApp = () => {
       if (results[7]) setDatesheets(results[7]);
       if (results[8]) setTransactions(results[8]);
       if (results[9]) setAdmins(results[9]);
-      if (results[10]) setMessages(results[10]);
-      if (results[11]) setFeeStructures(results[11]);
+      if (results[10]) setTeachers(results[10]);
+      if (results[11]) setMessages(results[11]);
+      if (results[12]) setFeeStructures(results[12]);
     } catch (error: any) {
       console.error('Error in fetchData:', error);
     } finally {
@@ -781,9 +751,9 @@ const ShahwilayatApp = () => {
       const data = await res.json();
       if (res.ok) {
         setShowAddAdmin(false);
-        setNewAdmin({ name: '', username: '', password: '', role: 'admin' });
+        setNewAdmin({ name: '', username: '', password: '', role: 'admin', student_id: undefined, teacher_id: undefined });
         fetchData();
-        showToast('Admin added successfully!', 'success');
+        showToast('Account created successfully!', 'success');
       } else {
         showToast(data.error || 'Failed to add admin', 'error');
       }
@@ -902,6 +872,36 @@ const ShahwilayatApp = () => {
     }
   };
 
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      return showToast('Passwords do not match', 'error');
+    }
+    try {
+      const res = await fetch(`${BASE_URL}/api/change-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          role: user.role,
+          oldPassword: passwordForm.oldPassword,
+          newPassword: passwordForm.newPassword
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Password updated successfully');
+        setShowPasswordChange(false);
+        setPasswordForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
+      } else {
+        showToast(data.error || 'Failed to update password', 'error');
+      }
+    } catch (err) {
+      showToast('Connection error', 'error');
+    }
+  };
+
   if (!user) {
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center p-4 py-12 relative overflow-hidden">
@@ -932,53 +932,18 @@ const ShahwilayatApp = () => {
               </div>
             </div>
 
-            {multipleProfiles ? (
-              <div className="space-y-6">
-                <div className="text-center">
-                  <h3 className="text-xl font-black text-dark">Choose Profile</h3>
-                  <p className="text-sm text-slate-500 mt-1">Multiple students found</p>
-                </div>
-                <div className="grid gap-4">
-                  {multipleProfiles.map(profile => (
-                    <button
-                      key={profile.id}
-                      onClick={() => handleSelectProfile(profile)}
-                      className="w-full p-6 bg-slate-50 border border-slate-100 rounded-[2rem] hover:border-primary hover:bg-white hover:shadow-2xl hover:shadow-primary/10 transition-all text-left flex items-center gap-5 group"
-                    >
-                      <div className="w-16 h-16 rounded-2xl bg-white shadow-sm flex items-center justify-center font-black text-2xl text-primary group-hover:bg-primary group-hover:text-white transition-all overflow-hidden">
-                        {profile.photo_url ? (
-                          <img src={profile.photo_url} alt={profile.name} className="w-full h-full object-cover" />
-                        ) : (
-                          profile.name.charAt(0)
-                        )}
-                      </div>
-                      <div>
-                        <p className="font-black text-dark text-lg">{profile.name}</p>
-                        <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Class {profile.class}-{profile.section}</p>
-                      </div>
-                      <ChevronRight className="ml-auto text-slate-300 group-hover:text-primary transition-colors" size={20} />
-                    </button>
-                  ))}
-                </div>
-                <button 
-                  onClick={() => setMultipleProfiles(null)}
-                  className="w-full py-4 text-center text-xs text-slate-400 font-black uppercase tracking-widest hover:text-primary transition-colors"
-                >
-                  ← Back to Login
-                </button>
-              </div>
-            ) : (
-              <>
-              <form onSubmit={handleLogin} className="space-y-6">
+            <form onSubmit={handleLogin} className="space-y-5">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Username or I.D.</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                    Username
+                  </label>
                   <div className="relative">
                     <UserIcon className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
                     <input 
                       required
                       type="text" 
                       className="input-premium pl-14"
-                      placeholder="Enter your ID"
+                      placeholder="Enter Username"
                       value={loginForm.username}
                       onChange={e => setLoginForm({...loginForm, username: e.target.value})}
                     />
@@ -1011,30 +976,10 @@ const ShahwilayatApp = () => {
                   </motion.div>
                 )}
 
-                <button type="submit" className="btn-premium w-full py-5 text-lg">
+                <button type="submit" className="btn-premium w-full py-4 text-base">
                   Sign In to Portal
                 </button>
-                
-                <div className="relative py-4">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-slate-100"></div>
-                  </div>
-                  <div className="relative flex justify-center text-[10px] uppercase">
-                    <span className="bg-white px-4 text-slate-300 font-black tracking-[0.3em]">Or</span>
-                  </div>
-                </div>
-
-                <button 
-                  type="button" 
-                  onClick={() => setUser({ id: 0, name: 'Public', role: 'guest' })}
-                  className="btn-ghost w-full py-5"
-                >
-                  <Globe size={20} />
-                  Explore as Guest
-                </button>
               </form>
-              </>
-            )}
           </div>
         </motion.div>
 
@@ -1072,108 +1017,118 @@ const ShahwilayatApp = () => {
     );
   }
 
+  const apps = [
+    { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'student', 'canteen', 'teacher'], color: 'bg-indigo-500 text-white' },
+    { id: 'events', icon: Calendar, label: 'Events', roles: ['admin', 'student', 'canteen', 'teacher'], color: 'bg-rose-500 text-white' },
+    { id: 'students', icon: Users, label: 'Students', roles: ['admin', 'canteen', 'teacher'], color: 'bg-blue-500 text-white' },
+    { id: 'fees', icon: FileCheck, label: 'Fee Management', roles: ['admin'], color: 'bg-emerald-500 text-white' },
+    { id: 'finance', icon: Wallet, label: user?.role === 'student' ? 'My Wallet' : 'Finance', roles: ['admin', 'canteen', 'student'], color: 'bg-amber-500 text-white' },
+    { id: 'canteen', icon: Coffee, label: 'Canteen', roles: ['admin', 'canteen'], color: 'bg-orange-500 text-white' },
+    { id: 'admins', icon: Settings, label: 'Admins', roles: ['admin'], color: 'bg-slate-700 text-white' },
+    { id: 'news', icon: Megaphone, label: 'News Feed', roles: ['admin', 'student', 'canteen', 'teacher'], color: 'bg-purple-500 text-white' },
+    { id: 'mail', icon: Mail, label: 'Mailbox', roles: ['admin', 'student', 'teacher'], color: 'bg-cyan-500 text-white' },
+    { id: 'attendance', icon: FileCheck, label: 'Attendance', roles: ['admin', 'student', 'teacher'], color: 'bg-green-500 text-white' },
+    { id: 'homework', icon: ClipboardList, label: 'Homework', roles: ['admin', 'student', 'teacher'], color: 'bg-indigo-600 text-white' },
+    { id: 'datesheets', icon: CalendarDays, label: 'Datesheets', roles: ['admin', 'student', 'teacher'], color: 'bg-rose-600 text-white' },
+    { id: 'results', icon: Award, label: 'Results', roles: ['admin', 'student', 'teacher'], color: 'bg-amber-600 text-white' },
+    { id: 'syllabus', icon: BookOpen, label: 'Syllabus', roles: ['admin', 'student', 'teacher'], color: 'bg-emerald-600 text-white' },
+    { id: 'schedules', icon: Clock, label: 'Schedules', roles: ['admin', 'student', 'teacher'], color: 'bg-blue-600 text-white' },
+    { id: 'online', icon: Video, label: 'Online Classes', roles: ['admin', 'student', 'teacher'], color: 'bg-cyan-600 text-white' },
+    { id: 'ai', icon: Bot, label: 'AI Assistant', roles: ['admin', 'student', 'canteen', 'teacher'], color: 'bg-primary text-white' },
+    { id: 'about', icon: Info, label: 'About Us', roles: ['admin', 'student', 'canteen', 'teacher'], color: 'bg-slate-800 text-white' },
+  ];
+
   return (
-    <div className="min-h-screen bg-white flex">
-      {/* Sidebar */}
-      <motion.aside 
-        initial={false}
-        animate={{ width: isSidebarOpen ? 300 : 100 }}
-        className="bg-slate-50 border-r border-slate-100 flex flex-col relative z-30"
-      >
-        <div className="p-8 flex items-center gap-4">
-          <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
-            <Logo className="w-10 h-10" />
-          </div>
-          {isSidebarOpen && (
-            <div className="flex flex-col">
-              <h1 className="font-black text-dark leading-none text-lg">Shahwilayat</h1>
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mt-1">Portal v2.0</span>
-            </div>
-          )}
-        </div>
-
-        <button 
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="absolute -right-4 top-24 bg-white border border-slate-100 rounded-full p-2 shadow-xl hover:scale-110 transition-all z-40 text-slate-400 hover:text-primary"
-        >
-          {isSidebarOpen ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
-        </button>
-
-        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto custom-scrollbar">
-          {[
-            { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'student', 'canteen', 'guest'] },
-            { id: 'events', icon: Calendar, label: 'Events', roles: ['admin', 'student', 'canteen', 'guest'] },
-            { id: 'students', icon: Users, label: 'Students', roles: ['admin', 'canteen'] },
-            { id: 'fees', icon: FileCheck, label: 'Fee Management', roles: ['admin'] },
-            { id: 'finance', icon: Wallet, label: user.role === 'student' ? 'My Wallet' : 'Finance', roles: ['admin', 'canteen', 'student'] },
-            { id: 'canteen', icon: Coffee, label: 'Canteen', roles: ['admin', 'canteen'] },
-            { id: 'admins', icon: Settings, label: 'Manage Admins', roles: ['admin'] },
-            { id: 'news', icon: Megaphone, label: 'News Feed', roles: ['admin', 'student', 'canteen', 'guest'] },
-            { id: 'mail', icon: Mail, label: 'Mailbox', roles: ['admin', 'student'] },
-            { id: 'attendance', icon: FileCheck, label: 'Attendance', roles: ['admin', 'student'] },
-            { id: 'homework', icon: ClipboardList, label: 'Homework', roles: ['admin', 'student'] },
-            { id: 'datesheets', icon: CalendarDays, label: 'Datesheets', roles: ['admin', 'student', 'guest'] },
-            { id: 'results', icon: Award, label: 'Results', roles: ['admin', 'student'] },
-            { id: 'syllabus', icon: BookOpen, label: 'Syllabus', roles: ['admin', 'student', 'guest'] },
-            { id: 'schedules', icon: Clock, label: 'Schedules', roles: ['admin', 'student', 'guest'] },
-            { id: 'online', icon: Video, label: 'Online Classes', roles: ['admin', 'student'] },
-            { id: 'ai', icon: Bot, label: 'AI Assistant', roles: ['admin', 'student', 'canteen', 'guest'] },
-            { id: 'about', icon: Info, label: 'About Us', roles: ['admin', 'student', 'canteen', 'guest'] },
-          ].filter(item => item.roles.includes(user.role)).map((item: any) => (
-            <button 
-              key={item.id}
-              onClick={() => setActiveTab(item.id as any)}
-              className={`sidebar-item w-full ${activeTab === item.id ? 'sidebar-item-active' : ''} ${!isSidebarOpen && 'justify-center px-0'}`}
-            >
-              <item.icon size={22} />
-              {isSidebarOpen && <span>{item.label}</span>}
-            </button>
-          ))}
-        </nav>
-
-        <div className="p-6 border-t border-slate-100">
-          <button 
-            onClick={handleLogout}
-            className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold transition-all ${user.role === 'guest' ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100' : 'bg-rose-50 text-rose-600 hover:bg-rose-100'} ${!isSidebarOpen && 'justify-center px-0'}`}
-          >
-            {user.role === 'guest' ? <LogIn size={22} /> : <LogOut size={22} />}
-            {isSidebarOpen && (user.role === 'guest' ? 'Sign In' : 'Sign Out')}
-          </button>
-        </div>
-      </motion.aside>
-
+    <div className="min-h-screen bg-white flex flex-col bg-mesh">
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto bg-white relative">
-        <header className="bg-white/80 backdrop-blur-md border-b border-slate-50 px-8 py-6 flex justify-between items-center sticky top-0 z-20">
-          <div className="flex items-center gap-6">
-            <h2 className="text-2xl font-black text-dark capitalize tracking-tight">{activeTab}</h2>
-            <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-slate-50 rounded-full border border-slate-100">
-              <div className={`w-2 h-2 rounded-full ${serverStatus === 'online' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                System {serverStatus === 'online' ? 'Live' : 'Offline'}
-              </span>
-            </div>
+      <main className="flex-1 overflow-y-auto relative">
+        <header className="bg-white/60 backdrop-blur-xl border-b border-white/40 px-8 py-6 flex justify-between items-center sticky top-0 z-20">
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setShowLaunchpad(true)}
+              className="bg-white/80 p-2 rounded-xl border border-white/60 text-slate-400 hover:text-primary hover:bg-white hover:shadow-xl transition-all flex items-center gap-2 group backdrop-blur-md"
+            >
+              <Home size={18} className="group-hover:scale-110 transition-transform" />
+            </button>
+            <div className="h-6 w-px bg-slate-200 mx-1" />
+            <h2 className="text-xl font-black text-dark tracking-tight">
+              {showLaunchpad ? (
+                <span className="gradient-text">Shahwilayat</span>
+              ) : (
+                <span className="capitalize">{activeTab}</span>
+              )}
+            </h2>
           </div>
           
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             {user.role !== 'guest' && (
-              <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-2xl border border-slate-100">
-                <div className="w-10 h-10 rounded-xl bg-primary text-white flex items-center justify-center font-black">
-                  {user.name.charAt(0)}
-                </div>
-                <div className="hidden lg:block pr-2">
-                  <p className="text-xs font-black text-dark leading-none">{user.name}</p>
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">{user.role}</p>
-                </div>
-              </div>
+              <button 
+                onClick={() => setShowPasswordChange(true)}
+                className="p-2 bg-white/80 text-slate-400 rounded-xl hover:text-primary hover:bg-white transition-all border border-white/60 backdrop-blur-md"
+                title="Change Password"
+              >
+                <Lock size={18} />
+              </button>
             )}
-            <button onClick={() => fetchData()} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:text-primary hover:bg-white hover:shadow-lg transition-all border border-slate-100">
-              <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
+            <button onClick={() => fetchData()} className="p-2 bg-white/80 text-slate-400 rounded-xl hover:text-primary hover:bg-white transition-all border border-white/60 backdrop-blur-md">
+              <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+            </button>
+            <button 
+              onClick={handleLogout}
+              className="p-2 bg-rose-50/80 text-rose-600 rounded-xl hover:bg-rose-100 transition-all border border-rose-100/60 backdrop-blur-md"
+              title="Sign Out"
+            >
+              <LogOut size={18} />
             </button>
           </div>
         </header>
 
-        <div className="p-8 max-w-[1600px] mx-auto">
+        <div className="p-4 max-w-[1600px] mx-auto">
+          {showLaunchpad ? (
+            <div className="space-y-8 py-4">
+              <div className="text-center space-y-4 max-w-2xl mx-auto">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="bg-white p-4 rounded-[2rem] shadow-xl shadow-primary/10 inline-block mb-2 border border-white relative group"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-secondary/20 rounded-[2rem] blur-xl group-hover:blur-2xl transition-all" />
+                  <Logo className="w-16 h-16 relative z-10" />
+                </motion.div>
+                <div className="space-y-1">
+                  <h1 className="text-3xl font-black text-dark tracking-tighter leading-tight">
+                    Welcome, <span className="gradient-text">{user.name.split(' ')[0]}</span>
+                  </h1>
+                  <p className="text-slate-400 font-bold uppercase tracking-[0.3em] text-[8px]">Shahwilayat Public School Portal</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-9 gap-4">
+                {apps.filter(app => app.roles.includes(user.role)).map((app, i) => (
+                  <motion.button
+                    key={app.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.02 }}
+                    whileHover={{ y: -5, scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      setActiveTab(app.id as any);
+                      setShowLaunchpad(false);
+                    }}
+                    className="flex flex-col items-center gap-2 group"
+                  >
+                    <div className={`w-20 h-20 rounded-3xl ${app.color} flex items-center justify-center shadow-lg shadow-black/5 group-hover:shadow-primary/30 transition-all relative overflow-hidden border-2 border-white`}>
+                      <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+                      <app.icon size={28} strokeWidth={2.5} className="relative z-10 group-hover:scale-110 transition-transform duration-300" />
+                    </div>
+                    <span className="text-[9px] font-black text-slate-500 text-center uppercase tracking-wider group-hover:text-primary transition-colors block truncate w-full px-1">{app.label}</span>
+                  </motion.button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <>
           {loading && !stats && (
             <div className="flex flex-col items-center justify-center py-32 space-y-6">
               <div className="relative">
@@ -2146,9 +2101,12 @@ const ShahwilayatApp = () => {
                       <td className="px-6 py-4 text-sm text-gray-500">{admin.username}</td>
                       <td className="px-6 py-4">
                         <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                          admin.role === 'admin' ? 'bg-purple-50 text-purple-600' : 'bg-amber-50 text-amber-600'
+                          admin.role === 'admin' ? 'bg-purple-50 text-purple-600' : 
+                          admin.role === 'teacher' ? 'bg-blue-50 text-blue-600' :
+                          admin.role === 'student' ? 'bg-emerald-50 text-emerald-600' :
+                          'bg-amber-50 text-amber-600'
                         }`}>
-                          {admin.role === 'admin' ? 'Administrator' : 'Canteen Staff'}
+                          {admin.role}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
@@ -2504,49 +2462,62 @@ const ShahwilayatApp = () => {
         )}
 
         {activeTab === 'homework' && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xl font-bold text-gray-900">Homework & Classwork</h3>
+          <div className="space-y-8">
+            <div className="flex justify-between items-center bg-gradient-to-r from-indigo-600 to-primary p-8 rounded-3xl text-white shadow-xl shadow-primary/20">
+              <div>
+                <h2 className="text-3xl font-black tracking-tight mb-2">Homework & Classwork</h2>
+                <p className="text-indigo-100 font-medium">Track assignments and academic progress</p>
+              </div>
               {user.role === 'admin' && (
                 <button 
                   onClick={() => setShowAddHomework(true)}
-                  className="bg-indigo-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-indigo-700 transition-all"
+                  className="bg-white text-primary px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:scale-105 transition-all shadow-xl"
                 >
-                  <Plus size={18} /> Add Work
+                  <Plus size={18} className="inline mr-2" /> Add New Work
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {homework
                 .filter(h => user.role === 'admin' || (h.grade === user.grade && h.class === user.class && h.section === user.section))
-                .map((h) => (
+                .map((h, i) => (
                 <motion.div 
                   key={h.id}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm"
+                  transition={{ delay: i * 0.05 }}
+                  className="premium-card group"
                 >
-                  <div className="flex justify-between items-start mb-4">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                  <div className="flex justify-between items-start mb-6">
+                    <span className={`badge ${
                       h.type === 'Homework' ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-600'
                     }`}>
                       {h.type}
                     </span>
-                    <span className="text-xs text-gray-400">Assigned: {new Date(h.date_assigned).toLocaleDateString()}</span>
+                    <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                      <Calendar size={14} /> {new Date(h.date_assigned).toLocaleDateString()}
+                    </div>
                   </div>
-                  <h4 className="text-lg font-bold text-gray-900 mb-1">{h.subject}</h4>
-                  <p className="text-xs text-gray-500 mb-3">Grade {h.grade} • {h.class}-{h.section}</p>
-                  <p className="text-gray-600 text-sm leading-relaxed mb-4">{h.content}</p>
+                  <h4 className="text-xl font-black text-dark mb-2 group-hover:text-primary transition-colors">{h.subject}</h4>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">Grade {h.grade} • {h.class}-{h.section}</p>
+                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 mb-6">
+                    <p className="text-slate-600 text-sm leading-relaxed font-medium">{h.content}</p>
+                  </div>
                   {h.date_due && (
-                    <div className="flex items-center gap-2 text-xs font-bold text-red-500">
-                      <Clock size={14} /> Due: {new Date(h.date_due).toLocaleDateString()}
+                    <div className="flex items-center gap-3 text-xs font-black text-rose-500 bg-rose-50 p-4 rounded-xl border border-rose-100">
+                      <Clock size={16} /> 
+                      <span className="uppercase tracking-widest">Due: {new Date(h.date_due).toLocaleDateString()}</span>
                     </div>
                   )}
                 </motion.div>
               ))}
               {homework.filter(h => user.role === 'admin' || (h.grade === user.grade && h.class === user.class && h.section === user.section)).length === 0 && (
-                <div className="col-span-full p-12 text-center text-gray-400 bg-white rounded-2xl border border-dashed border-gray-200">
-                  No homework or classwork assigned yet.
+                <div className="col-span-full py-32 text-center bg-white/50 rounded-[3rem] border-2 border-dashed border-slate-200 backdrop-blur-sm">
+                  <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <ClipboardList className="text-slate-300" size={48} />
+                  </div>
+                  <p className="text-slate-400 font-black uppercase tracking-widest">No homework or classwork assigned yet</p>
                 </div>
               )}
             </div>
@@ -2763,60 +2734,26 @@ const ShahwilayatApp = () => {
 
         {activeTab === 'events' && (
           <div className="space-y-8">
-            <div className="flex justify-between items-center bg-gradient-to-r from-primary to-accent p-8 rounded-3xl text-white shadow-xl shadow-primary/20">
-              <div>
+            <div className="flex justify-between items-center bg-gradient-to-r from-rose-500 to-accent p-8 rounded-[2.5rem] text-white shadow-xl shadow-rose-500/20 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32 blur-3xl" />
+              <div className="relative z-10">
                 <h2 className="text-3xl font-black tracking-tight mb-2">Upcoming Events</h2>
-                <p className="text-indigo-100 font-medium">Stay updated with school activities and important dates</p>
+                <p className="text-rose-100 font-medium opacity-80">Stay updated with school activities and important dates</p>
               </div>
-              <div className="bg-white/20 p-4 rounded-2xl backdrop-blur-xl border border-white/20">
+              <div className="relative z-10 bg-white/20 p-5 rounded-3xl backdrop-blur-xl border border-white/20 shadow-inner">
                 <Calendar size={32} className="text-white" />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[
-                { id: 1, title: 'Annual Science Fair', date: '2026-04-15', time: '09:00 AM', location: 'Main Auditorium', description: 'Students showcase their innovative science projects.', category: 'academic', color: 'bg-blue-50 border-blue-200 text-blue-700', icon: BookOpen },
-                { id: 2, title: 'Sports Day 2026', date: '2026-04-22', time: '08:00 AM', location: 'School Ground', description: 'Annual sports competition featuring various athletic events.', category: 'extracurricular', color: 'bg-emerald-50 border-emerald-200 text-emerald-700', icon: Award },
-                { id: 3, title: 'Parent-Teacher Meeting', date: '2026-04-28', time: '02:00 PM', location: 'Respective Classrooms', description: 'Discussing student progress and academic performance.', category: 'administrative', color: 'bg-purple-50 border-purple-200 text-purple-700', icon: Users },
-                { id: 4, title: 'Eid-ul-Fitr Holidays', date: '2026-05-01', time: 'All Day', location: 'School Wide', description: 'School will remain closed for Eid celebrations.', category: 'holiday', color: 'bg-rose-50 border-rose-200 text-rose-700', icon: CalendarDays },
-                { id: 5, title: 'Art Exhibition', date: '2026-05-10', time: '10:00 AM', location: 'Art Gallery', description: 'Displaying creative artworks by our talented students.', category: 'extracurricular', color: 'bg-amber-50 border-amber-200 text-amber-700', icon: LayoutDashboard },
-              ].map(event => (
-                <motion.div 
-                  key={event.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  whileHover={{ y: -5 }}
-                  className={`p-6 rounded-3xl border-2 shadow-sm ${event.color} relative overflow-hidden group`}
-                >
-                  <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                    <event.icon size={80} />
-                  </div>
-                  <div className="relative z-10">
-                    <div className="flex items-center gap-2 mb-4">
-                      <span className="px-3 py-1 bg-white/60 backdrop-blur-sm rounded-full text-xs font-bold uppercase tracking-wider">
-                        {event.category}
-                      </span>
-                    </div>
-                    <h3 className="text-xl font-black mb-2 leading-tight">{event.title}</h3>
-                    <p className="text-sm opacity-80 mb-6 line-clamp-2">{event.description}</p>
-                    
-                    <div className="space-y-2 text-sm font-medium">
-                      <div className="flex items-center gap-2">
-                        <Calendar size={16} />
-                        <span>{new Date(event.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Clock size={16} />
-                        <span>{event.time}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <MapPin size={16} />
-                        <span>{event.location}</span>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {/* Events will be populated by admin */}
+              <div className="col-span-full py-32 text-center bg-white/50 rounded-[3rem] border-2 border-dashed border-slate-200 backdrop-blur-sm">
+                <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Calendar size={48} className="text-slate-300" />
+                </div>
+                <p className="text-slate-400 font-black uppercase tracking-widest">No upcoming events scheduled</p>
+                <p className="text-slate-300 text-xs mt-2 font-bold uppercase tracking-widest">Check back later for updates</p>
+              </div>
             </div>
           </div>
         )}
@@ -3337,11 +3274,65 @@ const ShahwilayatApp = () => {
             )}
           </div>
         )}
-        </div>
-      </main>
+      </>
+      )}
+      </div>
+    </main>
 
       {/* Modals */}
       <AnimatePresence>
+        {showPasswordChange && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }} 
+              className="bg-white rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl border border-white"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-black text-dark tracking-tight">Change Password</h3>
+                <button onClick={() => setShowPasswordChange(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                  <X size={24} />
+                </button>
+              </div>
+              <form onSubmit={handlePasswordChange} className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Current Password</label>
+                  <input 
+                    type="password" 
+                    required 
+                    className="input-premium"
+                    value={passwordForm.oldPassword}
+                    onChange={(e) => setPasswordForm({...passwordForm, oldPassword: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">New Password</label>
+                  <input 
+                    type="password" 
+                    required 
+                    className="input-premium"
+                    value={passwordForm.newPassword}
+                    onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Confirm New Password</label>
+                  <input 
+                    type="password" 
+                    required 
+                    className="input-premium"
+                    value={passwordForm.confirmPassword}
+                    onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
+                  />
+                </div>
+                <button type="submit" className="btn-premium w-full py-4 mt-4">
+                  Update Password
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
         {showAddFeeStructure && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl">
@@ -3477,175 +3468,147 @@ const ShahwilayatApp = () => {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden"
             >
               <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-primary text-white">
-                <h3 className="text-xl font-bold">Add New Student</h3>
-                <button onClick={() => setShowAddStudent(false)} className="text-white/80 hover:text-white">
-                  <X size={24} />
+                <div>
+                  <h3 className="text-xl font-bold">Add New Student</h3>
+                  <p className="text-white/70 text-xs mt-1 font-medium">Enter student details to create a new profile</p>
+                </div>
+                <button onClick={() => setShowAddStudent(false)} className="bg-white/10 p-2 rounded-xl text-white hover:bg-white/20 transition-colors">
+                  <X size={20} />
                 </button>
               </div>
-              <form onSubmit={handleAddStudent} className="p-6 space-y-4">
-                <div className="flex justify-center mb-4">
-                  <div className="relative group">
-                    <div className="w-24 h-24 rounded-2xl bg-gray-100 border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden">
-                      {isUploadingPhoto ? (
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                      ) : newStudent.photo_url ? (
-                        <img src={newStudent.photo_url} alt="Preview" className="w-full h-full object-cover" />
-                      ) : (
-                        <Camera className="text-gray-400" size={32} />
-                      )}
+              <form onSubmit={handleAddStudent} className="p-8">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div className="flex flex-col items-center space-y-4">
+                    <div className="relative group">
+                      <div className="w-32 h-32 rounded-3xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden transition-all group-hover:border-primary/50">
+                        {isUploadingPhoto ? (
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                        ) : newStudent.photo_url ? (
+                          <img src={newStudent.photo_url} alt="Preview" className="w-full h-full object-cover" />
+                        ) : (
+                          <Camera className="text-slate-300" size={40} />
+                        )}
+                      </div>
+                      <label className="absolute inset-0 flex items-center justify-center bg-primary/60 opacity-0 group-hover:opacity-100 transition-all cursor-pointer rounded-3xl backdrop-blur-[2px]">
+                        <Camera className="text-white" size={28} />
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={(e) => handleFileChange(e, (url) => setNewStudent({...newStudent, photo_url: url}))}
+                        />
+                      </label>
                     </div>
-                    <label className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-2xl">
-                      <Camera className="text-white" size={24} />
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Student Photo</p>
+                  </div>
+                  <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                    <div className="sm:col-span-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Full Name</label>
                       <input 
-                        type="file" 
-                        accept="image/*" 
-                        className="hidden" 
-                        onChange={(e) => handleFileChange(e, (url) => setNewStudent({...newStudent, photo_url: url}))}
+                        required
+                        type="text" 
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all text-sm font-bold text-slate-700"
+                        placeholder="e.g. Muhammad Ali"
+                        value={newStudent.name}
+                        onChange={e => setNewStudent({...newStudent, name: e.target.value})}
                       />
-                    </label>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Roll Number</label>
+                      <input 
+                        required
+                        type="text" 
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all text-sm font-bold text-slate-700"
+                        placeholder="Roll No"
+                        value={newStudent.roll_no}
+                        onChange={e => setNewStudent({...newStudent, roll_no: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Computer No</label>
+                      <input 
+                        required
+                        type="text" 
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all text-sm font-bold text-slate-700"
+                        placeholder="Comp No"
+                        value={newStudent.computer_number}
+                        onChange={e => setNewStudent({...newStudent, computer_number: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Grade</label>
+                      <input 
+                        required
+                        type="text" 
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all text-sm font-bold text-slate-700"
+                        placeholder="e.g. 10"
+                        value={newStudent.grade}
+                        onChange={e => setNewStudent({...newStudent, grade: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Class & Section</label>
+                      <div className="flex gap-2">
+                        <input 
+                          required
+                          type="text" 
+                          className="w-1/2 px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all text-sm font-bold text-slate-700"
+                          placeholder="Class"
+                          value={newStudent.class}
+                          onChange={e => setNewStudent({...newStudent, class: e.target.value})}
+                        />
+                        <input 
+                          required
+                          type="text" 
+                          className="w-1/2 px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all text-sm font-bold text-slate-700"
+                          placeholder="Sec"
+                          value={newStudent.section}
+                          onChange={e => setNewStudent({...newStudent, section: e.target.value})}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">CNIC / ID</label>
+                      <input 
+                        required
+                        type="text" 
+                        placeholder="42101-XXXXXXX-X"
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all text-sm font-bold text-slate-700"
+                        value={newStudent.cnic}
+                        onChange={e => setNewStudent({...newStudent, cnic: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Parent Contact</label>
+                      <input 
+                        required
+                        type="text" 
+                        placeholder="Contact Number"
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all text-sm font-bold text-slate-700"
+                        value={newStudent.parent_contact}
+                        onChange={e => setNewStudent({...newStudent, parent_contact: e.target.value})}
+                      />
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                  <input 
-                    required
-                    type="text" 
-                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none"
-                    value={newStudent.name}
-                    onChange={e => setNewStudent({...newStudent, name: e.target.value})}
-                  />
+                <div className="mt-8 flex gap-3">
+                  <button 
+                    type="button"
+                    onClick={() => setShowAddStudent(false)}
+                    className="flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-50 hover:bg-slate-100 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="flex-[2] py-3 bg-primary text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all"
+                  >
+                    Register Student
+                  </button>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Roll Number</label>
-                    <input 
-                      required
-                      type="text" 
-                      className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none"
-                      value={newStudent.roll_no}
-                      onChange={e => setNewStudent({...newStudent, roll_no: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Computer Number</label>
-                    <input 
-                      required
-                      type="text" 
-                      className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none"
-                      value={newStudent.computer_number}
-                      onChange={e => setNewStudent({...newStudent, computer_number: e.target.value})}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Grade</label>
-                    <input 
-                      required
-                      type="text" 
-                      className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none"
-                      value={newStudent.grade}
-                      onChange={e => setNewStudent({...newStudent, grade: e.target.value})}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
-                    <input 
-                      required
-                      type="text" 
-                      className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none"
-                      value={newStudent.class}
-                      onChange={e => setNewStudent({...newStudent, class: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Section</label>
-                    <input 
-                      required
-                      type="text" 
-                      className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none"
-                      value={newStudent.section}
-                      onChange={e => setNewStudent({...newStudent, section: e.target.value})}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">CNIC Number</label>
-                    <input 
-                      required
-                      type="text" 
-                      placeholder="42101-XXXXXXX-X"
-                      className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
-                      value={newStudent.cnic}
-                      onChange={e => setNewStudent({...newStudent, cnic: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                    <input 
-                      required
-                      type="password" 
-                      className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
-                      value={newStudent.password}
-                      onChange={e => setNewStudent({...newStudent, password: e.target.value})}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Parent Contact</label>
-                    <input 
-                      required
-                      type="text" 
-                      className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
-                      value={newStudent.parent_contact}
-                      onChange={e => setNewStudent({...newStudent, parent_contact: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Parent Email</label>
-                    <input 
-                      type="email" 
-                      className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
-                      value={newStudent.parent_email}
-                      onChange={e => setNewStudent({...newStudent, parent_email: e.target.value})}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact</label>
-                  <input 
-                    type="text" 
-                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
-                    value={newStudent.emergency_contact}
-                    onChange={e => setNewStudent({...newStudent, emergency_contact: e.target.value})}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Academic Notes</label>
-                  <textarea 
-                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none resize-none h-20"
-                    value={newStudent.academic_notes}
-                    onChange={e => setNewStudent({...newStudent, academic_notes: e.target.value})}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Medical Notes</label>
-                  <textarea 
-                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none resize-none h-20"
-                    value={newStudent.medical_notes}
-                    onChange={e => setNewStudent({...newStudent, medical_notes: e.target.value})}
-                  />
-                </div>
-                <button type="submit" className="w-full bg-primary text-white py-3 rounded-xl font-bold hover:bg-accent transition-all mt-4 shadow-lg shadow-primary/20">
-                  Register Student
-                </button>
               </form>
             </motion.div>
           </div>
@@ -4499,59 +4462,116 @@ const ShahwilayatApp = () => {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
             >
-              <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-                <h3 className="text-xl font-bold text-gray-900">Add New Admin</h3>
-                <button onClick={() => setShowAddAdmin(false)} className="text-gray-400 hover:text-gray-600">
-                  <X size={24} />
+              <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-indigo-600 text-white">
+                <div>
+                  <h3 className="text-xl font-bold">Create User Account</h3>
+                  <p className="text-indigo-100 text-xs mt-1 font-medium">Assign roles and credentials for new users</p>
+                </div>
+                <button onClick={() => setShowAddAdmin(false)} className="bg-white/10 p-2 rounded-xl text-white hover:bg-white/20 transition-colors">
+                  <X size={20} />
                 </button>
               </div>
-              <form onSubmit={handleAddAdmin} className="p-6 space-y-4">
+              <form onSubmit={handleAddAdmin} className="p-8 space-y-5">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Full Name</label>
                   <input 
                     required
                     type="text" 
-                    className="w-full px-4 py-2 border border-gray-200 rounded-xl outline-none"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all text-sm font-bold text-slate-700"
+                    placeholder="e.g. Admin User"
                     value={newAdmin.name}
                     onChange={e => setNewAdmin({...newAdmin, name: e.target.value})}
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-                  <input 
-                    required
-                    type="text" 
-                    className="w-full px-4 py-2 border border-gray-200 rounded-xl outline-none"
-                    value={newAdmin.username}
-                    onChange={e => setNewAdmin({...newAdmin, username: e.target.value})}
-                  />
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Username</label>
+                    <input 
+                      required
+                      type="text" 
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all text-sm font-bold text-slate-700"
+                      placeholder="Username"
+                      value={newAdmin.username}
+                      onChange={e => setNewAdmin({...newAdmin, username: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Password</label>
+                    <input 
+                      required
+                      type="password" 
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all text-sm font-bold text-slate-700"
+                      placeholder="••••••••"
+                      value={newAdmin.password}
+                      onChange={e => setNewAdmin({...newAdmin, password: e.target.value})}
+                    />
+                  </div>
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                  <input 
-                    required
-                    type="password" 
-                    className="w-full px-4 py-2 border border-gray-200 rounded-xl outline-none"
-                    value={newAdmin.password}
-                    onChange={e => setNewAdmin({...newAdmin, password: e.target.value})}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Account Role</label>
                   <select 
-                    className="w-full px-4 py-2 border border-gray-200 rounded-xl outline-none"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all text-sm font-bold text-slate-700 appearance-none cursor-pointer"
                     value={newAdmin.role}
                     onChange={e => setNewAdmin({...newAdmin, role: e.target.value})}
                   >
                     <option value="admin">Administrator</option>
+                    <option value="teacher">Teacher</option>
+                    <option value="student">Student</option>
                     <option value="canteen">Canteen Staff</option>
                   </select>
                 </div>
-                <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all mt-4">
-                  Create Account
-                </button>
+
+                {newAdmin.role === 'student' && (
+                  <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Link Student Profile</label>
+                    <select 
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all text-sm font-bold text-slate-700 appearance-none cursor-pointer"
+                      value={newAdmin.student_id || ''}
+                      onChange={e => setNewAdmin({...newAdmin, student_id: parseInt(e.target.value)})}
+                    >
+                      <option value="">Select Student</option>
+                      {students.map(s => (
+                        <option key={s.id} value={s.id}>{s.name} ({s.roll_no})</option>
+                      ))}
+                    </select>
+                  </motion.div>
+                )}
+
+                {newAdmin.role === 'teacher' && (
+                  <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Link Teacher Profile</label>
+                    <select 
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all text-sm font-bold text-slate-700 appearance-none cursor-pointer"
+                      value={newAdmin.teacher_id || ''}
+                      onChange={e => setNewAdmin({...newAdmin, teacher_id: parseInt(e.target.value)})}
+                    >
+                      <option value="">Select Teacher</option>
+                      {teachers.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </motion.div>
+                )}
+
+                <div className="pt-4 flex gap-3">
+                  <button 
+                    type="button"
+                    onClick={() => setShowAddAdmin(false)}
+                    className="flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-50 hover:bg-slate-100 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="flex-[2] py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-600/20 hover:scale-[1.02] active:scale-95 transition-all"
+                  >
+                    Create Account
+                  </button>
+                </div>
               </form>
             </motion.div>
           </div>

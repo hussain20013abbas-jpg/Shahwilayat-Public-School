@@ -106,6 +106,17 @@ try {
       username TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
       role TEXT DEFAULT 'admin',
+      balance REAL DEFAULT 0,
+      student_id INTEGER,
+      teacher_id INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS teachers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      username TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL,
+      subject TEXT,
       balance REAL DEFAULT 0
     );
 
@@ -120,6 +131,7 @@ try {
 
     -- Insert default admin if not exists
     INSERT OR IGNORE INTO admins (name, username, password, role) VALUES ('Administrator', 'admin', 'admin123', 'admin');
+    INSERT OR IGNORE INTO teachers (name, username, password, subject) VALUES ('Demo Teacher', 'teacher', 'teacher123', 'Computer Science');
     INSERT OR IGNORE INTO canteen_staff (name, username, password) VALUES ('Canteen Manager', 'canteen', 'canteen123');
 
     -- Insert a default student for testing if none exist
@@ -357,63 +369,75 @@ async function startServer() {
   // API Routes
   app.post("/api/login", (req, res) => {
     try {
-      const { username, password, type } = req.body;
-      console.log(`Login attempt: ${username} as ${type}`);
+      const { username, password } = req.body;
+      console.log(`Login attempt: ${username}`);
       
-      if (type === 'admin') {
-        const admin = db.prepare("SELECT * FROM admins WHERE username = ?").get(username) as any;
-        if (!admin) {
-          return res.status(401).json({ error: "Admin username not found" });
-        }
-        if (admin.password !== password) {
-          return res.status(401).json({ error: "Incorrect admin password" });
-        }
-        return res.json({ id: admin.id, name: admin.name, role: 'admin', balance: admin.balance });
-      } else if (type === 'canteen') {
-        const staff = db.prepare("SELECT * FROM canteen_staff WHERE username = ?").get(username) as any;
-        if (!staff) {
-          return res.status(401).json({ error: "Canteen staff username not found" });
-        }
-        if (staff.password !== password) {
-          return res.status(401).json({ error: "Incorrect canteen staff password" });
-        }
-        return res.json({ id: staff.id, name: staff.name, role: 'canteen', balance: staff.balance });
-      } else {
-        const students = db.prepare("SELECT * FROM students WHERE cnic = ?").all(username) as any[];
-        if (students.length === 0) {
-          return res.status(401).json({ error: "Student CNIC not found" });
-        }
-        
-        // Check if any student with this CNIC has the correct password
-        const validStudents = students.filter(s => s.password === password);
-        if (validStudents.length === 0) {
-          return res.status(401).json({ error: "Incorrect student password" });
-        }
+      const user = db.prepare("SELECT * FROM admins WHERE username = ?").get(username) as any;
+      if (!user) {
+        return res.status(401).json({ error: "Username not found" });
+      }
+      if (user.password !== password) {
+        return res.status(401).json({ error: "Incorrect password" });
+      }
 
-        if (validStudents.length > 1) {
-          // Multiple profiles found for this CNIC/Password
+      if (user.role === 'student' && user.student_id) {
+        const student = db.prepare("SELECT * FROM students WHERE id = ?").get(user.student_id) as any;
+        if (student) {
           return res.json({ 
-            multiple: true, 
-            profiles: validStudents.map(s => ({ id: s.id, name: s.name, grade: s.grade, class: s.class, section: s.section, computer_number: s.computer_number, balance: s.balance })) 
+            id: student.id, 
+            name: student.name, 
+            role: 'student', 
+            student_id: student.id, 
+            computer_number: student.computer_number,
+            balance: student.balance,
+            grade: student.grade,
+            class: student.class,
+            section: student.section
           });
         }
-
-        const student = validStudents[0];
-        return res.json({ 
-          id: student.id, 
-          name: student.name, 
-          role: 'student', 
-          student_id: student.id, 
-          computer_number: student.computer_number,
-          balance: student.balance,
-          grade: student.grade,
-          class: student.class,
-          section: student.section
-        });
       }
+
+      if (user.role === 'teacher' && user.teacher_id) {
+        const teacher = db.prepare("SELECT * FROM teachers WHERE id = ?").get(user.teacher_id) as any;
+        if (teacher) {
+          return res.json({ 
+            id: teacher.id, 
+            name: teacher.name, 
+            role: 'teacher', 
+            balance: teacher.balance 
+          });
+        }
+      }
+
+      return res.json({ id: user.id, name: user.name, role: user.role, balance: user.balance });
     } catch (err: any) {
       console.error("Login error details:", err);
       res.status(500).json({ error: `Server error: ${err.message}` });
+    }
+  });
+
+  app.post("/api/change-password", (req, res) => {
+    try {
+      const { userId, role, oldPassword, newPassword } = req.body;
+      
+      let table = '';
+      if (role === 'admin') table = 'admins';
+      else if (role === 'teacher') table = 'teachers';
+      else if (role === 'student') table = 'students';
+      else if (role === 'canteen') table = 'canteen_staff';
+      else return res.status(400).json({ error: "Invalid role" });
+
+      const user = db.prepare(`SELECT password FROM ${table} WHERE id = ?`).get(userId) as any;
+      if (!user) return res.status(404).json({ error: "User not found" });
+      
+      if (user.password !== oldPassword) {
+        return res.status(401).json({ error: "Incorrect current password" });
+      }
+
+      db.prepare(`UPDATE ${table} SET password = ? WHERE id = ?`).run(newPassword, userId);
+      res.json({ success: true, message: "Password updated successfully" });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 
@@ -505,8 +529,17 @@ async function startServer() {
   // Admin Management Routes
   app.get("/api/admins", (req, res) => {
     try {
-      const admins = db.prepare("SELECT id, name, username, role, balance FROM admins").all();
+      const admins = db.prepare("SELECT id, name, username, role, balance, student_id, teacher_id FROM admins").all();
       res.json(admins);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/teachers", (req, res) => {
+    try {
+      const teachers = db.prepare("SELECT * FROM teachers").all();
+      res.json(teachers);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -514,8 +547,8 @@ async function startServer() {
 
   app.post("/api/admins", (req, res) => {
     try {
-      const { name, username, password, role } = req.body;
-      const result = db.prepare("INSERT INTO admins (name, username, password, role) VALUES (?, ?, ?, ?)").run(name, username, password, role || 'admin');
+      const { name, username, password, role, student_id, teacher_id } = req.body;
+      const result = db.prepare("INSERT INTO admins (name, username, password, role, student_id, teacher_id) VALUES (?, ?, ?, ?, ?, ?)").run(name, username, password, role || 'admin', student_id || null, teacher_id || null);
       res.json({ id: result.lastInsertRowid, success: true });
     } catch (err: any) {
       if (err.message.includes('UNIQUE constraint failed')) {

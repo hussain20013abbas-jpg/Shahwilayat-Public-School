@@ -24,7 +24,7 @@ export interface Student {
 export interface User {
   id: number;
   name: string;
-  role: 'admin' | 'student' | 'canteen' | 'guest';
+  role: 'admin' | 'student' | 'canteen' | 'guest' | 'teacher';
   student_id?: number;
   computer_number?: string;
 }
