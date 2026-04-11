@@ -16,6 +16,7 @@ import {
   BookOpen,
   Calendar,
   Video,
+  Edit,
   Info,
   CheckCircle2,
   FileText,
@@ -57,6 +58,10 @@ import {
   Bot,
   Sparkles,
   RefreshCw,
+  ArrowLeft,
+  ShieldCheck,
+  Moon,
+  DollarSign,
   Hash
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
@@ -103,6 +108,7 @@ const ShahwilayatApp = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<any[]>([]);
   const [admins, setAdmins] = useState<any[]>([]);
+  const [canteenStaff, setCanteenStaff] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [syllabus, setSyllabus] = useState<Syllabus[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
@@ -115,6 +121,8 @@ const ShahwilayatApp = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [showAddStudent, setShowAddStudent] = useState(false);
+  const [showEditStudent, setShowEditStudent] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [showAddTransaction, setShowAddTransaction] = useState(false);
   const [showAddAnnouncement, setShowAddAnnouncement] = useState(false);
   const [showAddGrade, setShowAddGrade] = useState(false);
@@ -125,6 +133,8 @@ const ShahwilayatApp = () => {
   const [showAddSchedule, setShowAddSchedule] = useState(false);
   const [showAddOnlineClass, setShowAddOnlineClass] = useState(false);
   const [showAddAdmin, setShowAddAdmin] = useState(false);
+  const [showEditUser, setShowEditUser] = useState(false);
+  const [editingUser, setEditingUser] = useState<any>(null);
   const [showAddFeeStructure, setShowAddFeeStructure] = useState(false);
   const [showAddMessage, setShowAddMessage] = useState(false);
   const [showReceipt, setShowReceipt] = useState<Transaction | null>(null);
@@ -152,7 +162,7 @@ const ShahwilayatApp = () => {
   const [newSyllabus, setNewSyllabus] = useState({ subject: '', grade: '', content: '', file_url: '' });
   const [newSchedule, setNewSchedule] = useState({ grade: '', day: 'Monday', time_slot: '', subject: '', teacher: '', location: '', is_weekend: false });
   const [newOnlineClass, setNewOnlineClass] = useState({ grade: '', subject: '', link: '', time: '' });
-  const [newAdmin, setNewAdmin] = useState<{name: string, username: string, password: string, role: string, student_id?: number, teacher_id?: number}>({ name: '', username: '', password: '', role: 'admin' });
+  const [newAdmin, setNewAdmin] = useState<{name: string, username: string, password: string, role: string, student_id?: number, teacher_id?: number}>({ name: '', username: '', password: '', role: 'admin', student_id: undefined, teacher_id: undefined });
   const [newFeeStructure, setNewFeeStructure] = useState({ grade: '', amount: '', frequency: 'Monthly', description: '' });
   const [resetForm, setResetForm] = useState({ type: 'student' as 'student' | 'admin' | 'canteen', identifier: '', verification: '', new_password: '' });
   const [resetMessage, setResetMessage] = useState({ text: '', type: 'success' as 'success' | 'error' });
@@ -163,11 +173,14 @@ const ShahwilayatApp = () => {
   const [attendanceView, setAttendanceView] = useState<'mark' | 'report'>('mark');
   const [financeFilters, setFinanceFilters] = useState({ student_id: '', start_date: '', end_date: '' });
   const [studentFilters, setStudentFilters] = useState({ grade: '', class: '', section: '' });
+  const [studentSubTab, setStudentSubTab] = useState<'students' | 'teachers'>('students');
+  const [adminSubTab, setAdminSubTab] = useState<'admins' | 'teachers' | 'canteen'>('admins');
   const [canteenSearch, setCanteenSearch] = useState('');
   const [canteenStudent, setCanteenStudent] = useState<Student | null>(null);
   const [canteenAmount, setCanteenAmount] = useState('');
   const [canteenProcessing, setCanteenProcessing] = useState(false);
   const [canteenPassword, setCanteenPassword] = useState('');
+  const [academicRecords, setAcademicRecords] = useState<any[]>([]);
 
   const [aiInput, setAiInput] = useState('');
   const [aiResponse, setAiResponse] = useState('');
@@ -371,7 +384,8 @@ const ShahwilayatApp = () => {
         { key: 'admins', url: `${BASE_URL}/api/admins` },
         { key: 'teachers', url: `${BASE_URL}/api/teachers` },
         { key: 'messages', url: `${BASE_URL}/api/messages?userId=${user?.id}&role=${user?.role}` },
-        { key: 'feeStructures', url: `${BASE_URL}/api/fee-structures` }
+        { key: 'feeStructures', url: `${BASE_URL}/api/fee-structures` },
+        { key: 'academicRecords', url: `${BASE_URL}/api/academic_records` }
       ];
       
       const results = await Promise.all(endpoints.map(async (endpoint) => {
@@ -400,6 +414,8 @@ const ShahwilayatApp = () => {
       if (results[10]) setTeachers(results[10]);
       if (results[11]) setMessages(results[11]);
       if (results[12]) setFeeStructures(results[12]);
+      if (results[13]) setCanteenStaff(results[13]);
+      if (results[14]) setAcademicRecords(results[14]);
     } catch (error: any) {
       console.error('Error in fetchData:', error);
     } finally {
@@ -463,6 +479,7 @@ const ShahwilayatApp = () => {
         body: JSON.stringify(newStudent)
       });
       if (res.ok) {
+        showToast('Student registered successfully!', 'success');
         setShowAddStudent(false);
         setNewStudent({ name: '', roll_no: '', grade: '', class: '', section: '', parent_contact: '', parent_email: '', emergency_contact: '', academic_notes: '', medical_notes: '', photo_url: '', cnic: '', computer_number: '', password: '' });
         fetchData();
@@ -619,7 +636,8 @@ const ShahwilayatApp = () => {
           type: 'debit',
           fee_type: 'canteen',
           description: 'Canteen Snack Purchase',
-          password: canteenPassword
+          password: canteenPassword,
+          canteen_staff_id: user.canteen_id
         })
       });
       if (res.ok) {
@@ -743,10 +761,26 @@ const ShahwilayatApp = () => {
   const handleAddAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch(`${BASE_URL}/api/admins`, {
+      let endpoint = `${BASE_URL}/api/admins`;
+      let payload = { ...newAdmin };
+
+      // If it's a teacher or canteen staff and NOT linked, we might want to create the profile too
+      // But for simplicity, we'll use the specific endpoints if they are new profiles
+      if (newAdmin.role === 'teacher' && !newAdmin.teacher_id) {
+        endpoint = `${BASE_URL}/api/teachers`;
+        payload = { ...newAdmin, subject: 'General' } as any;
+      } else if (newAdmin.role === 'canteen') {
+        endpoint = `${BASE_URL}/api/canteen_staff`;
+      } else if (newAdmin.role === 'student' && !newAdmin.student_id) {
+        // This is handled by the students tab usually, but we can support it here
+        endpoint = `${BASE_URL}/api/students`;
+        payload = { ...newAdmin, roll_no: newAdmin.username, grade: '1', class: '1', section: 'A', cnic: '00000-0000000-0' } as any;
+      }
+
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newAdmin)
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (res.ok) {
@@ -755,10 +789,76 @@ const ShahwilayatApp = () => {
         fetchData();
         showToast('Account created successfully!', 'success');
       } else {
-        showToast(data.error || 'Failed to add admin', 'error');
+        showToast(data.error || 'Failed to create account', 'error');
       }
     } catch (error) {
-      console.error('Error adding admin:', error);
+      console.error('Error creating account:', error);
+      showToast('Connection error', 'error');
+    }
+  };
+
+  const handleEditUser = (userToEdit: any) => {
+    setEditingUser({ ...userToEdit });
+    setShowEditUser(true);
+  };
+
+  const handleUpdateStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStudent) return;
+    try {
+      const res = await fetch(`${BASE_URL}/api/students/${editingStudent.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingStudent)
+      });
+      if (res.ok) {
+        setShowEditStudent(false);
+        setEditingStudent(null);
+        fetchData();
+        showToast('Student profile updated!', 'success');
+      } else {
+        const data = await res.json();
+        showToast(data.error || 'Update failed', 'error');
+      }
+    } catch (error) {
+      console.error('Error updating student:', error);
+      showToast('Connection error', 'error');
+    }
+  };
+
+  const handleUpdateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+
+    try {
+      let endpoint = `${BASE_URL}/api/admins/${editingUser.id}`;
+      
+      // Determine endpoint based on role and linked IDs
+      if (editingUser.role === 'student' && editingUser.student_id) {
+        endpoint = `${BASE_URL}/api/students/${editingUser.student_id}`;
+      } else if (editingUser.role === 'teacher' && editingUser.teacher_id) {
+        endpoint = `${BASE_URL}/api/teachers/${editingUser.teacher_id}`;
+      } else if (editingUser.role === 'canteen' && editingUser.canteen_id) {
+        endpoint = `${BASE_URL}/api/canteen_staff/${editingUser.canteen_id}`;
+      }
+
+      const res = await fetch(endpoint, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingUser)
+      });
+
+      if (res.ok) {
+        setShowEditUser(false);
+        setEditingUser(null);
+        fetchData();
+        showToast('User updated successfully!', 'success');
+      } else {
+        const data = await res.json();
+        showToast(data.error || 'Failed to update user', 'error');
+      }
+    } catch (error) {
+      console.error('Error updating user:', error);
       showToast('Connection error', 'error');
     }
   };
@@ -792,15 +892,48 @@ const ShahwilayatApp = () => {
     }
   };
 
-  const handleDeleteAdmin = async (id: number) => {
+  const handleDeleteUser = async (userToDelete: any) => {
+    if (!window.confirm(`Are you sure you want to delete ${userToDelete.name}?`)) return;
     try {
-      const res = await fetch(`${BASE_URL}/api/admins/${id}`, { method: 'DELETE' });
+      let endpoint = `${BASE_URL}/api/admins/${userToDelete.id}`;
+      if (userToDelete.role === 'student' && userToDelete.student_id) {
+        endpoint = `${BASE_URL}/api/students/${userToDelete.student_id}`;
+      } else if (userToDelete.role === 'teacher' && userToDelete.teacher_id) {
+        endpoint = `${BASE_URL}/api/teachers/${userToDelete.teacher_id}`;
+      } else if (userToDelete.role === 'canteen' && userToDelete.canteen_id) {
+        endpoint = `${BASE_URL}/api/canteen_staff/${userToDelete.canteen_id}`;
+      }
+
+      const res = await fetch(endpoint, { method: 'DELETE' });
       if (res.ok) {
-        fetchData();
-        showToast('Admin deleted successfully!', 'success');
+        if (userToDelete.id === user?.id || (userToDelete.role === 'student' && userToDelete.student_id === user?.student_id)) {
+          handleLogout();
+        } else {
+          fetchData();
+        }
+        showToast('User deleted successfully!', 'success');
       }
     } catch (error) {
-      console.error('Error deleting admin:', error);
+      console.error('Error deleting user:', error);
+      showToast('Connection error', 'error');
+    }
+  };
+
+  const handleDeleteStudent = async (id: number) => {
+    if (!window.confirm('Are you sure you want to delete this student? This will also delete their login account.')) return;
+    try {
+      const res = await fetch(`${BASE_URL}/api/students/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        if (user?.role === 'student' && user?.student_id === id) {
+          handleLogout();
+        } else {
+          fetchData();
+        }
+        showToast('Student deleted successfully!', 'success');
+      }
+    } catch (error) {
+      console.error('Error deleting student:', error);
+      showToast('Connection error', 'error');
     }
   };
 
@@ -1035,94 +1168,125 @@ const ShahwilayatApp = () => {
     { id: 'schedules', icon: Clock, label: 'Schedules', roles: ['admin', 'student', 'teacher'], color: 'bg-blue-600 text-white' },
     { id: 'online', icon: Video, label: 'Online Classes', roles: ['admin', 'student', 'teacher'], color: 'bg-cyan-600 text-white' },
     { id: 'ai', icon: Bot, label: 'AI Assistant', roles: ['admin', 'student', 'canteen', 'teacher'], color: 'bg-primary text-white' },
+    { id: 'profile', icon: UserIcon, label: 'My Profile', roles: ['admin', 'student', 'canteen', 'teacher'], color: 'bg-slate-600 text-white' },
     { id: 'about', icon: Info, label: 'About Us', roles: ['admin', 'student', 'canteen', 'teacher'], color: 'bg-slate-800 text-white' },
   ];
 
   return (
-    <div className="min-h-screen bg-white flex flex-col bg-mesh">
+    <div className="min-h-screen bg-white flex flex-col bg-mesh relative overflow-hidden">
+      {/* Decorative Background Elements */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/5 rounded-full blur-[120px] animate-pulse" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-secondary/5 rounded-full blur-[120px] animate-pulse delay-700" />
+      
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto relative">
-        <header className="bg-white/60 backdrop-blur-xl border-b border-white/40 px-8 py-6 flex justify-between items-center sticky top-0 z-20">
-          <div className="flex items-center gap-3">
+      <main className="flex-1 overflow-y-auto relative z-10">
+        <header className="bg-white/40 backdrop-blur-2xl border-b border-white/20 px-8 py-6 flex justify-between items-center sticky top-0 z-30">
+          <div className="flex items-center gap-4">
             <button 
               onClick={() => setShowLaunchpad(true)}
-              className="bg-white/80 p-2 rounded-xl border border-white/60 text-slate-400 hover:text-primary hover:bg-white hover:shadow-xl transition-all flex items-center gap-2 group backdrop-blur-md"
+              className="bg-white p-3 rounded-2xl border border-slate-100 text-slate-400 hover:text-primary hover:shadow-xl hover:shadow-primary/10 transition-all flex items-center gap-2 group shadow-sm"
+              title="Home Dashboard"
             >
-              <Home size={18} className="group-hover:scale-110 transition-transform" />
+              <Home size={20} className="group-hover:scale-110 transition-transform" />
             </button>
-            <div className="h-6 w-px bg-slate-200 mx-1" />
-            <h2 className="text-xl font-black text-dark tracking-tight">
-              {showLaunchpad ? (
-                <span className="gradient-text">Shahwilayat</span>
-              ) : (
-                <span className="capitalize">{activeTab}</span>
-              )}
-            </h2>
+            <div className="h-8 w-px bg-slate-200 mx-1 hidden sm:block" />
+            <div className="hidden sm:block">
+              <h2 className="text-lg font-black text-dark tracking-tight leading-none">
+                {showLaunchpad ? "Shahwilayat Portal" : <span className="capitalize">{activeTab}</span>}
+              </h2>
+              <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1">Academic Management System</p>
+            </div>
           </div>
           
-          <div className="flex items-center gap-2">
-            {user.role !== 'guest' && (
-              <button 
-                onClick={() => setShowPasswordChange(true)}
-                className="p-2 bg-white/80 text-slate-400 rounded-xl hover:text-primary hover:bg-white transition-all border border-white/60 backdrop-blur-md"
-                title="Change Password"
-              >
-                <Lock size={18} />
-              </button>
-            )}
-            <button onClick={() => fetchData()} className="p-2 bg-white/80 text-slate-400 rounded-xl hover:text-primary hover:bg-white transition-all border border-white/60 backdrop-blur-md">
-              <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+          <div className="flex items-center gap-3">
+            <div className="hidden md:flex flex-col items-end mr-4">
+              <span className="text-sm font-black text-dark">{user.name}</span>
+              <span className="text-[9px] font-black text-primary uppercase tracking-widest">{user.role}</span>
+            </div>
+            
+            <button 
+              onClick={() => fetchData()} 
+              className="p-3 bg-white text-slate-400 rounded-2xl hover:text-primary hover:shadow-xl hover:shadow-primary/10 transition-all border border-slate-100 shadow-sm"
+              title="Refresh Data"
+            >
+              <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
             </button>
+
             <button 
               onClick={handleLogout}
-              className="p-2 bg-rose-50/80 text-rose-600 rounded-xl hover:bg-rose-100 transition-all border border-rose-100/60 backdrop-blur-md"
+              className="group relative p-3 bg-white text-rose-500 rounded-2xl hover:bg-rose-500 hover:text-white transition-all duration-500 border border-slate-100 shadow-sm overflow-hidden"
               title="Sign Out"
             >
-              <LogOut size={18} />
+              <div className="absolute inset-0 bg-rose-500 translate-y-full group-hover:translate-y-0 transition-transform duration-500" />
+              <LogOut size={20} className="relative z-10 group-hover:rotate-12 transition-transform" />
             </button>
           </div>
         </header>
 
-        <div className="p-4 max-w-[1600px] mx-auto">
+        <div className="p-6 md:p-12 max-w-[1600px] mx-auto">
           {showLaunchpad ? (
-            <div className="space-y-8 py-4">
-              <div className="text-center space-y-4 max-w-2xl mx-auto">
+            <div className="space-y-12 py-8">
+              <div className="text-center space-y-6 max-w-3xl mx-auto">
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="bg-white p-4 rounded-[2rem] shadow-xl shadow-primary/10 inline-block mb-2 border border-white relative group"
+                  initial={{ opacity: 0, scale: 0.8, rotate: -10 }}
+                  animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                  transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                  className="bg-white p-6 rounded-[2.5rem] shadow-2xl shadow-primary/10 inline-block mb-4 border border-white relative group"
                 >
-                  <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-secondary/20 rounded-[2rem] blur-xl group-hover:blur-2xl transition-all" />
-                  <Logo className="w-16 h-16 relative z-10" />
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary/30 to-secondary/30 rounded-[2.5rem] blur-2xl group-hover:blur-3xl transition-all duration-500 opacity-50" />
+                  <Logo className="w-20 h-20 relative z-10" />
                 </motion.div>
-                <div className="space-y-1">
-                  <h1 className="text-3xl font-black text-dark tracking-tighter leading-tight">
-                    Welcome, <span className="gradient-text">{user.name.split(' ')[0]}</span>
-                  </h1>
-                  <p className="text-slate-400 font-bold uppercase tracking-[0.3em] text-[8px]">Shahwilayat Public School Portal</p>
+                <div className="space-y-2">
+                  <motion.h1 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-5xl md:text-6xl font-black text-dark tracking-tighter leading-tight"
+                  >
+                    Welcome back, <br className="md:hidden" />
+                    <span className="gradient-text">{user.name.split(' ')[0]}</span>
+                  </motion.h1>
+                  <motion.p 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.2 }}
+                    className="text-slate-400 font-black uppercase tracking-[0.4em] text-[10px]"
+                  >
+                    Your Academic Command Center
+                  </motion.p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-9 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-6">
                 {apps.filter(app => app.roles.includes(user.role)).map((app, i) => (
                   <motion.button
                     key={app.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.02 }}
-                    whileHover={{ y: -5, scale: 1.05 }}
+                    initial={{ opacity: 0, y: 30, scale: 0.9 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ 
+                      delay: i * 0.03,
+                      type: "spring",
+                      stiffness: 100,
+                      damping: 12
+                    }}
+                    whileHover={{ y: -8, scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => {
                       setActiveTab(app.id as any);
                       setShowLaunchpad(false);
                     }}
-                    className="flex flex-col items-center gap-2 group"
+                    className="flex flex-col items-center gap-4 group"
                   >
-                    <div className={`w-20 h-20 rounded-3xl ${app.color} flex items-center justify-center shadow-lg shadow-black/5 group-hover:shadow-primary/30 transition-all relative overflow-hidden border-2 border-white`}>
-                      <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-                      <app.icon size={28} strokeWidth={2.5} className="relative z-10 group-hover:scale-110 transition-transform duration-300" />
+                    <div className={`w-24 h-24 rounded-[2rem] ${app.color} flex items-center justify-center shadow-xl shadow-black/5 group-hover:shadow-primary/40 transition-all duration-500 relative overflow-hidden border-4 border-white`}>
+                      <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500" />
+                      <div className="absolute -top-4 -right-4 w-12 h-12 bg-white/10 rounded-full blur-xl group-hover:scale-150 transition-transform duration-700" />
+                      <app.icon size={36} strokeWidth={2.5} className="relative z-10 group-hover:scale-125 group-hover:rotate-6 transition-all duration-500" />
                     </div>
-                    <span className="text-[9px] font-black text-slate-500 text-center uppercase tracking-wider group-hover:text-primary transition-colors block truncate w-full px-1">{app.label}</span>
+                    <div className="text-center">
+                      <span className="text-[11px] font-black text-slate-600 uppercase tracking-widest group-hover:text-primary transition-colors block">
+                        {app.label}
+                      </span>
+                      <div className="h-1 w-0 bg-primary mx-auto mt-1 rounded-full group-hover:w-full transition-all duration-300" />
+                    </div>
                   </motion.button>
                 ))}
               </div>
@@ -1158,9 +1322,17 @@ const ShahwilayatApp = () => {
 
           {activeTab === 'profile' && user.role === 'student' && selectedStudent && (
             <div className="space-y-8">
-              <div className="flex items-center justify-between mb-8">
-                <h3 className="text-3xl font-black text-dark tracking-tight">Student Profile</h3>
-                <div className="badge bg-primary/10 text-primary">Academic Year 2026</div>
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
+                <div>
+                  <h3 className="text-3xl font-black text-dark tracking-tight">Student Profile</h3>
+                  <p className="text-slate-500 font-medium">Your academic and personal information</p>
+                </div>
+                <button 
+                  onClick={() => setShowLaunchpad(true)}
+                  className="flex items-center gap-2 px-6 py-3 bg-white text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all border border-slate-100 shadow-sm"
+                >
+                  <ArrowLeft size={18} /> Back to Dashboard
+                </button>
               </div>
               <div className="premium-card">
                 <div className="flex flex-col md:flex-row items-center md:items-start gap-12">
@@ -1224,20 +1396,246 @@ const ShahwilayatApp = () => {
                     )}
                   </div>
                 )}
+
+                <div className="mt-12 pt-12 border-t border-slate-50 flex justify-center">
+                  <button 
+                    onClick={() => handleDeleteStudent(selectedStudent.id)}
+                    className="flex items-center gap-2 px-8 py-4 bg-rose-50 text-rose-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-100 transition-all border border-rose-100"
+                  >
+                    <Trash2 size={18} /> Leave School / Delete Account
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'profile' && user.role !== 'student' && (
+            <div className="space-y-8">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
+                <div>
+                  <h3 className="text-3xl font-black text-dark tracking-tight">User Profile</h3>
+                  <p className="text-slate-500 font-medium">Manage your account settings and preferences</p>
+                </div>
+                <button 
+                  onClick={() => setShowLaunchpad(true)}
+                  className="flex items-center gap-2 px-6 py-3 bg-white text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all border border-slate-100 shadow-sm"
+                >
+                  <ArrowLeft size={18} /> Back to Dashboard
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-1 space-y-8">
+                  <div className="premium-card text-center">
+                    <div className="relative group mx-auto w-fit mb-6">
+                      <div className="absolute -inset-1 bg-gradient-to-r from-primary to-secondary rounded-full blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
+                      <div className="relative w-32 h-32 rounded-full bg-white border-4 border-white shadow-2xl overflow-hidden flex items-center justify-center">
+                        <UserIcon size={48} className="text-slate-200" />
+                      </div>
+                    </div>
+                    <h4 className="text-2xl font-black text-dark tracking-tight mb-1">{user.name}</h4>
+                    <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] mb-6">{user.role}</p>
+                    
+                    <div className="flex flex-col gap-3">
+                      <button 
+                        onClick={() => setShowPasswordChange(true)}
+                        className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-100 transition-all border border-indigo-100"
+                      >
+                        <Lock size={16} /> Change Password
+                      </button>
+                      {user.username !== 'admin' && (
+                        <button 
+                          onClick={() => handleDeleteUser(user)}
+                          className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-rose-50 text-rose-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-100 transition-all border border-rose-100"
+                        >
+                          <Trash2 size={16} /> Delete Account
+                        </button>
+                      )}
+                    </div>
+                    {user.username === 'admin' && (
+                      <p className="text-[10px] font-bold text-slate-400 italic mt-4">Primary administrator account cannot be deleted.</p>
+                    )}
+                  </div>
+
+                  <div className="premium-card">
+                    <h5 className="text-sm font-black text-dark uppercase tracking-widest mb-6 flex items-center gap-2">
+                      <Info size={16} className="text-primary" />
+                      Account Info
+                    </h5>
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center py-3 border-b border-slate-50">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">User ID</span>
+                        <span className="text-sm font-bold text-dark">#{user.id}</span>
+                      </div>
+                      <div className="flex justify-between items-center py-3 border-b border-slate-50">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</span>
+                        <span className="px-2 py-1 bg-emerald-100 text-emerald-600 rounded-lg text-[10px] font-black uppercase tracking-widest">Active</span>
+                      </div>
+                      <div className="flex justify-between items-center py-3">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Member Since</span>
+                        <span className="text-sm font-bold text-dark">2026</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="lg:col-span-2 space-y-8">
+                  {user.role === 'canteen' && (
+                    <div className="space-y-8">
+                      <div className="premium-card">
+                        <div className="flex justify-between items-center mb-6">
+                          <h5 className="text-sm font-black text-dark uppercase tracking-widest flex items-center gap-2">
+                            <Coffee size={16} className="text-orange-500" />
+                            Canteen Performance
+                          </h5>
+                          <button 
+                            onClick={() => setShowAddStudent(true)}
+                            className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-100 transition-all border border-emerald-100"
+                          >
+                            <Plus size={14} /> Add Student
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                          <div className="p-6 bg-orange-50 rounded-3xl border border-orange-100">
+                            <p className="text-[10px] font-black text-orange-400 uppercase tracking-widest mb-2">Total Sales</p>
+                            <p className="text-3xl font-black text-orange-600">Rs. {user.balance?.toLocaleString() || '0'}</p>
+                          </div>
+                          <div className="p-6 bg-blue-50 rounded-3xl border border-blue-100">
+                            <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">Transactions</p>
+                            <p className="text-3xl font-black text-blue-600">{transactions.filter(t => t.canteen_staff_id === user.canteen_id).length}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="premium-card">
+                        <h5 className="text-sm font-black text-dark uppercase tracking-widest mb-6 flex items-center gap-2">
+                          <History size={16} className="text-indigo-500" />
+                          Recent Sales
+                        </h5>
+                        <div className="space-y-4">
+                          {transactions
+                            .filter(t => t.canteen_staff_id === user.canteen_id)
+                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                            .slice(0, 5)
+                            .map((tx) => (
+                              <div key={tx.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                <div className="flex items-center gap-4">
+                                  <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-indigo-600 font-bold shadow-sm">
+                                    {students.find(s => s.id === tx.student_id)?.name?.charAt(0) || 'S'}
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-bold text-gray-900">{students.find(s => s.id === tx.student_id)?.name || 'Unknown Student'}</p>
+                                    <p className="text-[10px] text-gray-400 font-medium">{new Date(tx.date).toLocaleString()}</p>
+                                  </div>
+                                </div>
+                                <span className="font-black text-rose-600">- Rs. {tx.amount?.toLocaleString()}</span>
+                              </div>
+                            ))}
+                          {transactions.filter(t => t.canteen_staff_id === user.canteen_id).length === 0 && (
+                            <div className="text-center py-8 text-gray-400 font-medium italic">No sales recorded yet</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {user.role === 'teacher' && (
+                    <div className="premium-card">
+                      <h5 className="text-sm font-black text-dark uppercase tracking-widest mb-6 flex items-center gap-2">
+                        <BookOpen size={16} className="text-indigo-500" />
+                        Teaching Profile
+                      </h5>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                        <div className="p-6 bg-indigo-50 rounded-3xl border border-indigo-100">
+                          <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2">Assigned Classes</p>
+                          <p className="text-3xl font-black text-indigo-600">All Grades</p>
+                        </div>
+                        <div className="p-6 bg-emerald-50 rounded-3xl border border-emerald-100">
+                          <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2">Attendance Rate</p>
+                          <p className="text-3xl font-black text-emerald-600">98%</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {user.role === 'admin' && (
+                    <div className="premium-card">
+                      <h5 className="text-sm font-black text-dark uppercase tracking-widest mb-6 flex items-center gap-2">
+                        <ShieldCheck size={16} className="text-rose-500" />
+                        System Privileges
+                      </h5>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {['User Management', 'Financial Control', 'Academic Oversight', 'System Settings'].map((priv) => (
+                          <div key={priv} className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                            <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-rose-500 shadow-sm">
+                              <CheckCircle2 size={16} />
+                            </div>
+                            <span className="text-sm font-bold text-slate-700">{priv}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="premium-card">
+                    <h5 className="text-sm font-black text-dark uppercase tracking-widest mb-6 flex items-center gap-2">
+                      <Settings size={16} className="text-slate-400" />
+                      Preferences
+                    </h5>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-white rounded-xl text-slate-400 shadow-sm">
+                            <Bell size={18} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-slate-700">Email Notifications</p>
+                            <p className="text-[10px] text-slate-400 font-medium">Receive updates about school events</p>
+                          </div>
+                        </div>
+                        <div className="w-12 h-6 bg-primary rounded-full relative">
+                          <div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full shadow-sm" />
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-white rounded-xl text-slate-400 shadow-sm">
+                            <Moon size={18} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-slate-700">Dark Mode</p>
+                            <p className="text-[10px] text-slate-400 font-medium">Switch to a darker theme</p>
+                          </div>
+                        </div>
+                        <div className="w-12 h-6 bg-slate-200 rounded-full relative">
+                          <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full shadow-sm" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
 
           {activeTab === 'ai' && (
             <div className="space-y-8 max-w-4xl mx-auto">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center">
-                  <Sparkles className="text-indigo-600" size={24} />
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center">
+                    <Sparkles className="text-indigo-600" size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold text-gray-900">AI Assistant</h3>
+                    <p className="text-gray-500 text-sm">Ask me anything about your studies</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-2xl font-bold text-gray-900">Shah Wilayat Public School AI Assistant</h3>
-                  <p className="text-gray-500">Ask me anything about your studies, schedule, or general knowledge.</p>
-                </div>
+                <button 
+                  onClick={() => setShowLaunchpad(true)}
+                  className="flex items-center gap-2 px-6 py-3 bg-white text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all border border-slate-100 shadow-sm"
+                >
+                  <ArrowLeft size={18} /> Back to Dashboard
+                </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -1639,32 +2037,110 @@ const ShahwilayatApp = () => {
                       </div>
                     </>
                   )}
-                  {user.role === 'canteen' && (
-                    <div className="space-y-8">
+
+                  {user.role === 'teacher' && (
+                    <div className="space-y-12">
                       <motion.div 
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="bg-gradient-to-r from-orange-500 to-amber-500 p-8 rounded-[3rem] text-white shadow-2xl shadow-orange-500/20 relative overflow-hidden"
+                        className="bg-gradient-to-r from-indigo-500 to-purple-600 p-12 rounded-[3.5rem] text-white shadow-2xl shadow-indigo-500/20 flex flex-col md:flex-row items-center justify-between gap-12 relative overflow-hidden"
                       >
-                        <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full -mr-40 -mt-40 blur-3xl" />
-                        <div className="absolute bottom-0 left-0 w-64 h-64 bg-amber-400/20 rounded-full -ml-32 -mb-32 blur-2xl" />
-                        
-                        <div className="relative z-10">
-                          <h2 className="text-4xl font-black tracking-tight mb-4">Canteen Dashboard</h2>
-                          <p className="text-orange-100 text-lg max-w-2xl leading-relaxed mb-8">
-                            Manage canteen inventory, process student payments, and view daily sales.
-                          </p>
-                          
-                          <div className="flex flex-wrap gap-4">
-                            <button onClick={() => setActiveTab('canteen')} className="bg-white text-orange-600 px-6 py-3 rounded-xl font-bold hover:bg-orange-50 transition-colors shadow-lg">
-                              Open Canteen POS
-                            </button>
-                            <button onClick={() => setShowQRScanner(true)} className="bg-white/20 text-white px-6 py-3 rounded-xl font-bold hover:bg-white/30 transition-colors backdrop-blur-md border border-white/20">
-                              Scan QR Code
-                            </button>
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32 blur-3xl" />
+                        <div className="relative z-10 flex items-center gap-8">
+                          <div className="w-20 h-20 bg-white/20 rounded-3xl flex items-center justify-center text-white backdrop-blur-xl border border-white/20 shadow-inner">
+                            <BookOpen size={40} />
+                          </div>
+                          <div>
+                            <h3 className="text-3xl font-black tracking-tight mb-2">Teacher Dashboard</h3>
+                            <p className="text-indigo-50 font-medium opacity-80">Manage your classes, grades, and student performance.</p>
                           </div>
                         </div>
+                        <div className="relative z-10 flex gap-4">
+                          <button 
+                            onClick={() => setActiveTab('online')}
+                            className="bg-white text-indigo-600 px-8 py-4 rounded-2xl font-black uppercase tracking-widest hover:scale-105 transition-all shadow-xl"
+                          >
+                            My Classes
+                          </button>
+                        </div>
                       </motion.div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-xl shadow-slate-200/50">
+                          <div className="w-14 h-14 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center mb-6">
+                            <Video size={28} />
+                          </div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Classes</p>
+                          <h4 className="text-3xl font-black text-dark tracking-tight">{onlineClasses.filter(c => c.teacher_name === user.name).length}</h4>
+                        </div>
+                        <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-xl shadow-slate-200/50">
+                          <div className="w-14 h-14 bg-purple-100 text-purple-600 rounded-2xl flex items-center justify-center mb-6">
+                            <Users size={28} />
+                          </div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Students</p>
+                          <h4 className="text-3xl font-black text-dark tracking-tight">{students.length}</h4>
+                        </div>
+                        <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-xl shadow-slate-200/50">
+                          <div className="w-14 h-14 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mb-6">
+                            <Award size={28} />
+                          </div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Grades Posted</p>
+                          <h4 className="text-3xl font-black text-dark tracking-tight">{academicRecords.length}</h4>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {user.role === 'canteen' && (
+                    <div className="space-y-12">
+                      <motion.div 
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-gradient-to-r from-orange-500 to-amber-600 p-12 rounded-[3.5rem] text-white shadow-2xl shadow-orange-500/20 flex flex-col md:flex-row items-center justify-between gap-12 relative overflow-hidden"
+                      >
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32 blur-3xl" />
+                        <div className="relative z-10 flex items-center gap-8">
+                          <div className="w-20 h-20 bg-white/20 rounded-3xl flex items-center justify-center text-white backdrop-blur-xl border border-white/20 shadow-inner">
+                            <Coffee size={40} />
+                          </div>
+                          <div>
+                            <h3 className="text-3xl font-black tracking-tight mb-2">Canteen Dashboard</h3>
+                            <p className="text-orange-50 font-medium opacity-80">Manage sales and student balances efficiently.</p>
+                          </div>
+                        </div>
+                        <div className="relative z-10 flex gap-4">
+                          <button 
+                            onClick={() => setActiveTab('canteen')}
+                            className="bg-white text-orange-600 px-8 py-4 rounded-2xl font-black uppercase tracking-widest hover:scale-105 transition-all shadow-xl"
+                          >
+                            New Transaction
+                          </button>
+                        </div>
+                      </motion.div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-xl shadow-slate-200/50">
+                          <div className="w-14 h-14 bg-orange-100 text-orange-600 rounded-2xl flex items-center justify-center mb-6">
+                            <DollarSign size={28} />
+                          </div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Sales</p>
+                          <h4 className="text-3xl font-black text-dark tracking-tight">Rs. {user.balance?.toLocaleString() || '0'}</h4>
+                        </div>
+                        <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-xl shadow-slate-200/50">
+                          <div className="w-14 h-14 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-6">
+                            <Users size={28} />
+                          </div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Students Served</p>
+                          <h4 className="text-3xl font-black text-dark tracking-tight">{transactions.filter(t => t.type === 'debit').length}</h4>
+                        </div>
+                        <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-xl shadow-slate-200/50">
+                          <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mb-6">
+                            <History size={28} />
+                          </div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Recent Activity</p>
+                          <h4 className="text-3xl font-black text-dark tracking-tight">Active</h4>
+                        </div>
+                      </div>
                     </div>
                   )}
                   {user.role === 'guest' && (
@@ -1783,18 +2259,41 @@ const ShahwilayatApp = () => {
           {activeTab === 'canteen' && (
             <div className="space-y-8">
               <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
-                <h3 className="text-2xl font-bold text-gray-900 mb-6">Canteen Management</h3>
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-2xl font-bold text-gray-900">Canteen Management</h3>
+                  <div className="flex gap-2">
+                    {(user.role === 'admin' || user.role === 'canteen') && (
+                      <button 
+                        onClick={() => setShowAddStudent(true)}
+                        className="bg-emerald-500 text-white px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-emerald-600 transition-all text-sm shadow-lg shadow-emerald-500/10"
+                      >
+                        <Plus size={16} /> Add Student
+                      </button>
+                    )}
+                    {user.role === 'admin' && (
+                      <button 
+                        onClick={() => {
+                          setNewAdmin({...newAdmin, role: 'canteen'});
+                          setShowAddAdmin(true);
+                        }}
+                        className="bg-primary text-white px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-accent transition-all text-sm shadow-lg shadow-primary/10"
+                      >
+                        <Plus size={16} /> Add Canteen Staff
+                      </button>
+                    )}
+                  </div>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-6">
                     <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100">
                       <h4 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
                         <Search size={18} className="text-primary" />
-                        Find Student by Computer No
+                        Find Student by Computer No / Roll No
                       </h4>
                       <form onSubmit={handleCanteenSearch} className="flex gap-2">
                         <input 
                           type="text" 
-                          placeholder="Enter Computer No..." 
+                          placeholder="Enter Computer No / Roll No..." 
                           className="flex-1 px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                           value={canteenSearch}
                           onChange={e => setCanteenSearch(e.target.value)}
@@ -1852,6 +2351,31 @@ const ShahwilayatApp = () => {
                           </button>
                         </div>
                       </motion.div>
+                    )}
+
+                    {user.role === 'canteen' && (
+                      <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100">
+                        <h4 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                          <Users size={18} className="text-primary" />
+                          Canteen Staff
+                        </h4>
+                        <div className="space-y-3">
+                          {canteenStaff.map(staff => (
+                            <div key={staff.id} className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-100 shadow-sm">
+                              <div>
+                                <p className="text-sm font-bold text-gray-900">{staff.name}</p>
+                                <p className="text-[10px] text-gray-400">@{staff.username}</p>
+                              </div>
+                              <button 
+                                onClick={() => handleEditUser({...staff, role: 'canteen', canteen_id: staff.id})}
+                                className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                              >
+                                <Edit size={16} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     )}
                   </div>
 
@@ -2066,15 +2590,32 @@ const ShahwilayatApp = () => {
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <div>
-                <h3 className="text-2xl font-bold text-gray-900">Admin Management</h3>
-                <p className="text-gray-500 text-sm">Manage school administrators and canteen staff accounts</p>
+                <h3 className="text-2xl font-bold text-gray-900">User Management</h3>
+                <p className="text-gray-500 text-sm">Manage school staff, teachers, and administrators</p>
               </div>
-              <button 
-                onClick={() => setShowAddAdmin(true)}
-                className="bg-primary text-white px-6 py-2.5 rounded-xl flex items-center gap-2 hover:bg-accent transition-all shadow-lg shadow-primary/20"
-              >
-                <Plus size={20} /> Add New Admin
-              </button>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => {
+                    setNewAdmin({ name: '', username: '', password: '', role: adminSubTab === 'admins' ? 'admin' : adminSubTab === 'teachers' ? 'teacher' : 'canteen', student_id: undefined, teacher_id: undefined });
+                    setShowAddAdmin(true);
+                  }}
+                  className="bg-primary text-white px-6 py-2.5 rounded-xl flex items-center gap-2 hover:bg-accent transition-all shadow-lg shadow-primary/20"
+                >
+                  <Plus size={20} /> Add {adminSubTab === 'admins' ? 'Admin' : adminSubTab === 'teachers' ? 'Teacher' : 'Staff'}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4 mb-4">
+              {['admins', 'teachers', 'canteen'].map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setAdminSubTab(tab as any)}
+                  className={`px-6 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${adminSubTab === tab ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-white text-slate-400 hover:bg-slate-50 border border-slate-100'}`}
+                >
+                  {tab === 'canteen' ? 'Canteen Staff' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                </button>
+              ))}
             </div>
 
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
@@ -2088,11 +2629,14 @@ const ShahwilayatApp = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {admins.map((admin) => (
+                  {admins.filter(a => adminSubTab === 'admins' ? a.role === 'admin' : adminSubTab === 'teachers' ? a.role === 'teacher' : a.role === 'canteen').map((admin) => (
                     <tr key={admin.id} className="even:bg-gray-50/50 hover:bg-primary/5 transition-colors group">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
+                            admin.role === 'admin' ? 'bg-purple-100 text-purple-600' : 
+                            admin.role === 'teacher' ? 'bg-blue-100 text-blue-600' : 'bg-amber-100 text-amber-600'
+                          }`}>
                             {admin.name.charAt(0)}
                           </div>
                           <span className="font-bold text-gray-900">{admin.name}</span>
@@ -2110,15 +2654,24 @@ const ShahwilayatApp = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        {admin.username !== 'admin' && (
+                        <div className="flex items-center justify-end gap-2">
                           <button 
-                            onClick={() => handleDeleteAdmin(admin.id)}
-                            className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors"
-                            title="Delete Admin"
+                            onClick={() => handleEditUser(admin)}
+                            className="text-indigo-500 hover:bg-indigo-50 p-2 rounded-lg transition-colors"
+                            title="Edit User"
                           >
-                            <X size={18} />
+                            <Edit size={18} />
                           </button>
-                        )}
+                          {admin.username !== 'admin' && (
+                            <button 
+                              onClick={() => handleDeleteUser(admin)}
+                              className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors"
+                              title="Delete User"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -2272,13 +2825,136 @@ const ShahwilayatApp = () => {
       )}
 
         {activeTab === 'attendance' && (
-          <div className="space-y-6">
-            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-              <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                <div className="flex p-1 bg-gray-100 rounded-xl w-full md:w-auto">
+          <div className="space-y-8">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
+              <div>
+                <h3 className="text-3xl font-black text-dark tracking-tight">Attendance Management</h3>
+                <p className="text-slate-500 font-medium">Track and manage student presence across the school</p>
+              </div>
+              <button 
+                onClick={() => setShowLaunchpad(true)}
+                className="flex items-center gap-2 px-6 py-3 bg-white text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all border border-slate-100 shadow-sm"
+              >
+                <ArrowLeft size={18} /> Back to Dashboard
+              </button>
+            </div>
+
+            {user.role === 'student' ? (
+              <div className="space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <motion.div 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="premium-card bg-emerald-50/50 border-emerald-100"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-14 bg-emerald-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                        <CheckCircle2 size={28} />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">Attendance Rate</p>
+                        <h4 className="text-3xl font-black text-emerald-900">
+                          {selectedStudent?.attendance_percentage?.toFixed(1) || 0}%
+                        </h4>
+                      </div>
+                    </div>
+                  </motion.div>
+
+                  <motion.div 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                    className="premium-card bg-indigo-50/50 border-indigo-100"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-14 bg-indigo-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                        <Calendar size={28} />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-1">Total Days</p>
+                        <h4 className="text-3xl font-black text-indigo-900">
+                          {selectedStudent?.attendance?.length || 0}
+                        </h4>
+                      </div>
+                    </div>
+                  </motion.div>
+
+                  <motion.div 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                    className="premium-card bg-rose-50/50 border-rose-100"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-14 bg-rose-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-rose-500/20">
+                        <AlertCircle size={28} />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black text-rose-600 uppercase tracking-widest mb-1">Absents</p>
+                        <h4 className="text-3xl font-black text-rose-900">
+                          {selectedStudent?.attendance?.filter((a: any) => a.status === 'Absent').length || 0}
+                        </h4>
+                      </div>
+                    </div>
+                  </motion.div>
+                </div>
+
+                <div className="premium-card">
+                  <div className="flex items-center justify-between mb-8">
+                    <h4 className="text-xl font-black text-dark">Attendance History</h4>
+                    <div className="flex items-center gap-2 text-slate-400 text-xs font-bold">
+                      <Clock size={16} /> Last 30 Days
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="border-b border-slate-100">
+                          <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</th>
+                          <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Day</th>
+                          <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {selectedStudent?.attendance?.map((record: any) => (
+                          <tr key={record.id} className="group hover:bg-slate-50/50 transition-colors">
+                            <td className="py-4 text-sm font-bold text-slate-600">
+                              {new Date(record.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </td>
+                            <td className="py-4 text-sm font-medium text-slate-400">
+                              {new Date(record.date).toLocaleDateString('en-US', { weekday: 'long' })}
+                            </td>
+                            <td className="py-4">
+                              <div className="flex justify-center">
+                                <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${
+                                  record.status === 'Present' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                                  record.status === 'Absent' ? 'bg-rose-50 text-rose-600 border border-rose-100' :
+                                  'bg-amber-50 text-amber-600 border border-amber-100'
+                                }`}>
+                                  {record.status}
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                        {(!selectedStudent?.attendance || selectedStudent.attendance.length === 0) && (
+                          <tr>
+                            <td colSpan={3} className="py-12 text-center text-slate-400 font-medium italic">
+                              No attendance records found yet.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-8">
+                <div className="bg-white p-2 rounded-3xl border border-slate-100 shadow-sm inline-flex">
                   <button 
                     onClick={() => setAttendanceView('mark')}
-                    className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${attendanceView === 'mark' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'}`}
+                    className={`px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${attendanceView === 'mark' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-slate-400 hover:bg-slate-50'}`}
                   >
                     Mark Attendance
                   </button>
@@ -2287,174 +2963,201 @@ const ShahwilayatApp = () => {
                       setAttendanceView('report');
                       fetchAttendanceReport();
                     }}
-                    className={`flex-1 md:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${attendanceView === 'report' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'}`}
+                    className={`px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${attendanceView === 'report' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-slate-400 hover:bg-slate-50'}`}
                   >
                     Attendance Report
                   </button>
                 </div>
-                <div className="flex items-center gap-3 w-full md:w-auto">
-                  <Calendar size={20} className="text-gray-400" />
-                  <input 
-                    type="date" 
-                    className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-primary/20 w-full"
-                    value={attendanceDate}
-                    onChange={(e) => setAttendanceDate(e.target.value)}
-                  />
-                </div>
-              </div>
-            </div>
 
-            {attendanceView === 'mark' ? (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-gray-50 flex flex-wrap gap-4 items-center justify-between bg-indigo-50/30">
-                  <div className="flex flex-wrap gap-4 items-center">
-                    <div className="flex gap-4">
-                      <select 
-                        className="bg-white border border-gray-200 rounded-xl px-4 py-2 outline-none text-sm"
-                        value={attendanceFilters.grade}
-                        onChange={(e) => setAttendanceFilters({...attendanceFilters, grade: e.target.value})}
-                      >
-                        <option value="">All Grades</option>
-                        {[...new Set(students.map(s => s.grade))].map(g => <option key={g} value={g}>{g}</option>)}
-                      </select>
-                      <select 
-                        className="bg-white border border-gray-200 rounded-xl px-4 py-2 outline-none text-sm"
-                        value={attendanceFilters.class}
-                        onChange={(e) => setAttendanceFilters({...attendanceFilters, class: e.target.value})}
-                      >
-                        <option value="">All Classes</option>
-                        {[...new Set(students.map(s => s.class))].map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    </div>
-                    
-                    <div className="h-8 w-px bg-gray-200 mx-2 hidden md:block"></div>
-                    
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-gray-500 uppercase">Bulk Mark:</span>
-                      <div className="flex gap-1">
-                        {['Present', 'Absent', 'Late'].map((status) => (
-                          <button
-                            key={status}
-                            onClick={() => {
-                              const filtered = students.filter(s => 
-                                (!attendanceFilters.grade || s.grade === attendanceFilters.grade) && 
-                                (!attendanceFilters.class || s.class === attendanceFilters.class)
-                              );
-                              const newRecords = { ...attendanceRecords };
-                              filtered.forEach(s => {
-                                newRecords[s.id] = status as any;
-                              });
-                              setAttendanceRecords(newRecords);
-                            }}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                              status === 'Present' ? 'border-emerald-200 text-emerald-600 hover:bg-emerald-50' :
-                              status === 'Absent' ? 'border-red-200 text-red-600 hover:bg-red-50' :
-                              'border-amber-200 text-amber-600 hover:bg-amber-50'
-                            } bg-white`}
-                          >
-                            All {status}
-                          </button>
-                        ))}
+                <div className="premium-card">
+                  <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-8">
+                    <div className="flex items-center gap-4 w-full md:w-auto">
+                      <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100">
+                        <Calendar size={24} />
+                      </div>
+                      <div className="flex-1 md:flex-none">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Select Date</p>
+                        <input 
+                          type="date" 
+                          className="bg-transparent border-none p-0 text-lg font-black text-dark focus:ring-0 w-full"
+                          value={attendanceDate}
+                          onChange={(e) => setAttendanceDate(e.target.value)}
+                        />
                       </div>
                     </div>
+
+                    {attendanceView === 'mark' && (
+                      <div className="flex flex-wrap gap-4 items-center w-full md:w-auto">
+                        <select 
+                          className="bg-slate-50 border border-slate-100 rounded-2xl px-6 py-3 outline-none text-xs font-black uppercase tracking-widest text-slate-600 focus:ring-4 focus:ring-primary/10 transition-all"
+                          value={attendanceFilters.grade}
+                          onChange={(e) => setAttendanceFilters({...attendanceFilters, grade: e.target.value})}
+                        >
+                          <option value="">All Grades</option>
+                          {[...new Set(students.map(s => s.grade))].sort().map(g => <option key={g} value={g}>{g}</option>)}
+                        </select>
+                        <select 
+                          className="bg-slate-50 border border-slate-100 rounded-2xl px-6 py-3 outline-none text-xs font-black uppercase tracking-widest text-slate-600 focus:ring-4 focus:ring-primary/10 transition-all"
+                          value={attendanceFilters.class}
+                          onChange={(e) => setAttendanceFilters({...attendanceFilters, class: e.target.value})}
+                        >
+                          <option value="">All Classes</option>
+                          {[...new Set(students.map(s => s.class))].sort().map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                    )}
                   </div>
-                  
-                  <button 
-                    onClick={handleSaveAttendance}
-                    className="bg-primary text-white px-6 py-2 rounded-xl font-bold hover:bg-accent transition-all shadow-lg shadow-primary/20 flex items-center gap-2"
-                  >
-                    <Save size={18} /> Save Attendance
-                  </button>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
-                        <th className="px-6 py-4 font-medium">Student Name</th>
-                        <th className="px-6 py-4 font-medium">Computer Number</th>
-                        <th className="px-6 py-4 font-medium">Class</th>
-                        <th className="px-6 py-4 font-medium text-center">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {students
-                        .filter(s => (!attendanceFilters.grade || s.grade === attendanceFilters.grade) && (!attendanceFilters.class || s.class === attendanceFilters.class))
-                        .map((student) => (
-                        <tr key={student.id} className="even:bg-gray-50/50 hover:bg-indigo-50/30 transition-all">
-                          <td className="px-6 py-4 font-medium text-gray-900">{student.name}</td>
-                          <td className="px-6 py-4 text-gray-500 text-sm">{student.roll_no}</td>
-                          <td className="px-6 py-4 text-gray-500 text-sm">{student.class}-{student.section}</td>
-                          <td className="px-6 py-4">
-                            <div className="flex justify-center gap-2">
-                              {['Present', 'Absent', 'Late'].map((status) => (
-                                <button
-                                  key={status}
-                                  onClick={() => setAttendanceRecords({
-                                    ...attendanceRecords,
-                                    [student.id]: status as any
-                                  })}
-                                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                                    attendanceRecords[student.id] === status
-                                      ? status === 'Present' ? 'bg-emerald-100 text-emerald-600' :
-                                        status === 'Absent' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'
-                                      : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                                  }`}
-                                >
-                                  {status}
-                                </button>
-                              ))}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-gray-50 flex justify-between items-center">
-                  <h3 className="font-bold text-gray-900">Attendance Report - {new Date(attendanceDate).toLocaleDateString()}</h3>
-                  <button 
-                    onClick={fetchAttendanceReport}
-                    className="text-primary hover:underline text-sm font-bold flex items-center gap-2"
-                  >
-                    <Search size={16} /> Refresh Report
-                  </button>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
-                        <th className="px-6 py-4 font-medium">Student Name</th>
-                        <th className="px-6 py-4 font-medium">Computer Number</th>
-                        <th className="px-6 py-4 font-medium">Class</th>
-                        <th className="px-6 py-4 font-medium">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {attendanceReport.map((record, i) => (
-                        <tr key={record.id} className="even:bg-gray-50/50 hover:bg-indigo-50/30 transition-all">
-                          <td className="px-6 py-4 font-medium text-gray-900">{record.student_name}</td>
-                          <td className="px-6 py-4 text-gray-500 text-sm">{record.roll_no}</td>
-                          <td className="px-6 py-4 text-gray-500 text-sm">{record.class}-{record.section}</td>
-                          <td className="px-6 py-4">
-                            <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                              record.status === 'Present' ? 'bg-emerald-50 text-emerald-600' :
-                              record.status === 'Absent' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
-                            }`}>
-                              {record.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                      {attendanceReport.length === 0 && (
-                        <tr>
-                          <td colSpan={4} className="px-6 py-12 text-center text-gray-400">No records found for this date.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+
+                  {attendanceView === 'mark' ? (
+                    <div className="space-y-8">
+                      <div className="flex flex-wrap items-center justify-between gap-6 p-6 bg-slate-50 rounded-[2rem] border border-slate-100">
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Bulk Actions:</span>
+                          <div className="flex gap-2">
+                            {['Present', 'Absent', 'Late'].map((status) => (
+                              <button
+                                key={status}
+                                onClick={() => {
+                                  const filtered = students.filter(s => 
+                                    (!attendanceFilters.grade || s.grade === attendanceFilters.grade) && 
+                                    (!attendanceFilters.class || s.class === attendanceFilters.class)
+                                  );
+                                  const newRecords = { ...attendanceRecords };
+                                  filtered.forEach(s => {
+                                    newRecords[s.id] = status as any;
+                                  });
+                                  setAttendanceRecords(newRecords);
+                                }}
+                                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
+                                  status === 'Present' ? 'border-emerald-200 text-emerald-600 bg-emerald-50 hover:bg-emerald-100' :
+                                  status === 'Absent' ? 'border-rose-200 text-rose-600 bg-rose-50 hover:bg-rose-100' :
+                                  'border-amber-200 text-amber-600 bg-amber-50 hover:bg-amber-100'
+                                }`}
+                              >
+                                All {status}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        
+                        <button 
+                          onClick={handleSaveAttendance}
+                          className="bg-primary text-white px-8 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-accent transition-all shadow-xl shadow-primary/20 flex items-center gap-2"
+                        >
+                          <Save size={18} /> Save Records
+                        </button>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                          <thead>
+                            <tr className="border-b border-slate-100">
+                              <th className="pb-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Student</th>
+                              <th className="pb-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Computer No</th>
+                              <th className="pb-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Class</th>
+                              <th className="pb-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50">
+                            {students
+                              .filter(s => (!attendanceFilters.grade || s.grade === attendanceFilters.grade) && (!attendanceFilters.class || s.class === attendanceFilters.class))
+                              .map((student) => (
+                              <tr key={student.id} className="group hover:bg-slate-50/50 transition-colors">
+                                <td className="py-4 px-4">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center font-black text-xs border border-slate-200 overflow-hidden">
+                                      {student.photo_url ? (
+                                        <img src={student.photo_url} alt="" className="w-full h-full object-cover" />
+                                      ) : student.name.charAt(0)}
+                                    </div>
+                                    <span className="font-bold text-dark">{student.name}</span>
+                                  </div>
+                                </td>
+                                <td className="py-4 px-4 text-sm font-bold text-slate-400 font-mono">{student.roll_no}</td>
+                                <td className="py-4 px-4 text-sm font-bold text-slate-400">{student.class}-{student.section}</td>
+                                <td className="py-4 px-4">
+                                  <div className="flex justify-center gap-2">
+                                    {['Present', 'Absent', 'Late'].map((status) => (
+                                      <button
+                                        key={status}
+                                        onClick={() => setAttendanceRecords({
+                                          ...attendanceRecords,
+                                          [student.id]: status as any
+                                        })}
+                                        className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                                          attendanceRecords[student.id] === status
+                                            ? status === 'Present' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' :
+                                              status === 'Absent' ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20' : 
+                                              'bg-amber-500 text-white shadow-lg shadow-amber-500/20'
+                                            : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+                                        }`}
+                                      >
+                                        {status}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-8">
+                      <div className="flex items-center justify-between p-6 bg-slate-50 rounded-[2rem] border border-slate-100">
+                        <h4 className="text-sm font-black text-slate-600 uppercase tracking-widest">
+                          Daily Report: {new Date(attendanceDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                        </h4>
+                        <button 
+                          onClick={fetchAttendanceReport}
+                          className="flex items-center gap-2 px-6 py-2.5 bg-white text-primary rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-primary hover:text-white transition-all border border-primary/20 shadow-sm"
+                        >
+                          <RefreshCw size={14} /> Refresh
+                        </button>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                          <thead>
+                            <tr className="border-b border-slate-100">
+                              <th className="pb-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Student</th>
+                              <th className="pb-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Computer No</th>
+                              <th className="pb-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Class</th>
+                              <th className="pb-4 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50">
+                            {attendanceReport.map((record) => (
+                              <tr key={record.id} className="group hover:bg-slate-50/50 transition-colors">
+                                <td className="py-4 px-4 font-bold text-dark">{record.student_name}</td>
+                                <td className="py-4 px-4 text-sm font-bold text-slate-400 font-mono">{record.roll_no}</td>
+                                <td className="py-4 px-4 text-sm font-bold text-slate-400">{record.class}-{record.section}</td>
+                                <td className="py-4 px-4">
+                                  <div className="flex justify-center">
+                                    <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${
+                                      record.status === 'Present' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                                      record.status === 'Absent' ? 'bg-rose-50 text-rose-600 border border-rose-100' :
+                                      'bg-amber-50 text-amber-600 border border-amber-100'
+                                    }`}>
+                                      {record.status}
+                                    </span>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                            {attendanceReport.length === 0 && (
+                              <tr>
+                                <td colSpan={4} className="py-12 text-center text-slate-400 font-medium italic">
+                                  No records found for this date.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -2760,126 +3463,303 @@ const ShahwilayatApp = () => {
 
         {activeTab === 'students' && (
           <>
-            <div className="mb-6 p-4 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-wrap gap-4 items-center">
-              <div className="relative flex-1 min-w-[200px]">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                <input 
-                  type="text" 
-                  placeholder="Search students by name or roll no..." 
-                  className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <select 
-                  className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 outline-none text-sm focus:ring-2 focus:ring-indigo-500/20"
-                  value={studentFilters.grade}
-                  onChange={(e) => setStudentFilters({...studentFilters, grade: e.target.value})}
+            <div className="flex items-center gap-4 mb-8">
+              <button 
+                onClick={() => setStudentSubTab('students')}
+                className={`px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${studentSubTab === 'students' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
+              >
+                Students List
+              </button>
+              <button 
+                onClick={() => setStudentSubTab('teachers')}
+                className={`px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${studentSubTab === 'teachers' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
+              >
+                Teachers List
+              </button>
+              <button 
+                onClick={() => setStudentSubTab('canteen' as any)}
+                className={`px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${studentSubTab === ('canteen' as any) ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
+              >
+                Canteen Staff
+              </button>
+              {(user.role === 'admin' || user.role === 'teacher' || user.role === 'canteen') && (
+                <button 
+                  onClick={() => {
+                    if (studentSubTab === 'students') {
+                      setShowAddStudent(true);
+                    } else {
+                      setNewAdmin({ name: '', username: '', password: '', role: studentSubTab === 'teachers' ? 'teacher' : 'canteen', student_id: undefined, teacher_id: undefined });
+                      setShowAddAdmin(true);
+                    }
+                  }}
+                  className="ml-auto flex items-center gap-2 px-6 py-3 bg-emerald-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20"
                 >
-                  <option value="">All Grades</option>
-                  {[...new Set(students.map(s => s.grade))].sort().map(g => <option key={g} value={g}>{g}</option>)}
-                </select>
-                <select 
-                  className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 outline-none text-sm focus:ring-2 focus:ring-indigo-500/20"
-                  value={studentFilters.class}
-                  onChange={(e) => setStudentFilters({...studentFilters, class: e.target.value})}
-                >
-                  <option value="">All Classes</option>
-                  {[...new Set(students.map(s => s.class))].sort().map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <select 
-                  className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 outline-none text-sm focus:ring-2 focus:ring-indigo-500/20"
-                  value={studentFilters.section}
-                  onChange={(e) => setStudentFilters({...studentFilters, section: e.target.value})}
-                >
-                  <option value="">All Sections</option>
-                  {[...new Set(students.map(s => s.section))].sort().map(sec => <option key={sec} value={sec}>{sec}</option>)}
-                </select>
-                {(studentFilters.grade || studentFilters.class || studentFilters.section || searchQuery) && (
-                  <button 
-                    onClick={() => {
-                      setStudentFilters({ grade: '', class: '', section: '' });
-                      setSearchQuery('');
-                    }}
-                    className="text-primary text-sm font-bold hover:underline"
-                  >
-                    Clear Filters
-                  </button>
-                )}
-              </div>
+                  <Plus size={18} /> Add {studentSubTab === 'students' ? 'Student' : studentSubTab === 'teachers' ? 'Teacher' : 'Staff'}
+                </button>
+              )}
             </div>
 
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
-                  <th className="px-6 py-4 font-medium">Student Name</th>
-                  <th className="px-6 py-4 font-medium">Roll No</th>
-                  <th className="px-6 py-4 font-medium">Computer No</th>
-                  <th className="px-6 py-4 font-medium">Class</th>
-                  <th className="px-6 py-4 font-medium">Section</th>
-                  <th className="px-6 py-4 font-medium">Balance</th>
-                  <th className="px-6 py-4 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {filteredStudents.map((student) => (
-                  <tr key={student.id} className="even:bg-gray-50/50 hover:bg-primary/5 transition-all group">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs overflow-hidden border border-gray-100">
-                          {student.photo_url ? (
-                            <img src={student.photo_url} alt={student.name} className="w-full h-full object-cover" />
-                          ) : (
-                            student.name?.charAt(0) || '?'
-                          )}
-                        </div>
-                        <span className="font-medium text-gray-900">{student.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-gray-500 text-sm font-mono">{student.roll_no}</td>
-                    <td className="px-6 py-4 text-gray-500 text-sm font-mono">{student.computer_number || 'N/A'}</td>
-                    <td className="px-6 py-4 text-gray-500 text-sm">{student.class}</td>
-                    <td className="px-6 py-4 text-gray-500 text-sm">{student.section}</td>
-                    <td className="px-6 py-4">
-                      <span className={`font-bold ${(student.balance ?? 0) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                        Rs. {student.balance?.toLocaleString() ?? '0'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-4">
-                        <button 
-                          onClick={async () => {
-                            const res = await fetch(`${BASE_URL}/api/students/${student.id}`);
-                            const data = await res.json();
-                            setSelectedStudent(data);
-                          }}
-                          className="text-primary hover:text-accent font-medium text-sm flex items-center gap-1"
-                        >
-                          View Details <ChevronRight size={16} />
-                        </button>
-                        {user.role === 'admin' && (
-                          <button 
-                            onClick={() => {
-                              setSelectedStudent(student);
-                              setShowAddTransaction(true);
-                            }}
-                            className="text-emerald-600 hover:text-emerald-800 font-medium text-sm flex items-center gap-1"
-                          >
-                            <Plus size={14} /> Transaction
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {filteredStudents.length === 0 && (
-              <div className="p-12 text-center text-gray-400">No students found</div>
+            {studentSubTab === 'students' ? (
+              <>
+                <div className="mb-6 p-4 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-wrap gap-4 items-center">
+                  <div className="relative flex-1 min-w-[200px]">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                    <input 
+                      type="text" 
+                      placeholder="Search students by name or roll no..." 
+                      className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    <select 
+                      className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 outline-none text-sm focus:ring-2 focus:ring-indigo-500/20"
+                      value={studentFilters.grade}
+                      onChange={(e) => setStudentFilters({...studentFilters, grade: e.target.value})}
+                    >
+                      <option value="">All Grades</option>
+                      {[...new Set(students.map(s => s.grade))].sort().map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                    <select 
+                      className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 outline-none text-sm focus:ring-2 focus:ring-indigo-500/20"
+                      value={studentFilters.class}
+                      onChange={(e) => setStudentFilters({...studentFilters, class: e.target.value})}
+                    >
+                      <option value="">All Classes</option>
+                      {[...new Set(students.map(s => s.class))].sort().map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <select 
+                      className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 outline-none text-sm focus:ring-2 focus:ring-indigo-500/20"
+                      value={studentFilters.section}
+                      onChange={(e) => setStudentFilters({...studentFilters, section: e.target.value})}
+                    >
+                      <option value="">All Sections</option>
+                      {[...new Set(students.map(s => s.section))].sort().map(sec => <option key={sec} value={sec}>{sec}</option>)}
+                    </select>
+                    {(studentFilters.grade || studentFilters.class || studentFilters.section || searchQuery) && (
+                      <button 
+                        onClick={() => {
+                          setStudentFilters({ grade: '', class: '', section: '' });
+                          setSearchQuery('');
+                        }}
+                        className="text-primary text-sm font-bold hover:underline"
+                      >
+                        Clear Filters
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
+                      <th className="px-6 py-4 font-medium">Student Name</th>
+                      <th className="px-6 py-4 font-medium">Roll No</th>
+                      <th className="px-6 py-4 font-medium">Computer No</th>
+                      <th className="px-6 py-4 font-medium">Class</th>
+                      <th className="px-6 py-4 font-medium">Section</th>
+                      <th className="px-6 py-4 font-medium">Balance</th>
+                      <th className="px-6 py-4 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {filteredStudents.map((student) => (
+                      <tr key={student.id} className="even:bg-gray-50/50 hover:bg-primary/5 transition-all group">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs overflow-hidden border border-gray-100">
+                              {student.photo_url ? (
+                                <img src={student.photo_url} alt={student.name} className="w-full h-full object-cover" />
+                              ) : (
+                                student.name?.charAt(0) || '?'
+                              )}
+                            </div>
+                            <span className="font-medium text-gray-900">{student.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-gray-500 text-sm font-mono">{student.roll_no}</td>
+                        <td className="px-6 py-4 text-gray-500 text-sm font-mono">{student.computer_number || 'N/A'}</td>
+                        <td className="px-6 py-4 text-gray-500 text-sm">{student.class}</td>
+                        <td className="px-6 py-4 text-gray-500 text-sm">{student.section}</td>
+                        <td className="px-6 py-4">
+                          <span className={`font-bold ${(student.balance ?? 0) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                            Rs. {student.balance?.toLocaleString() ?? '0'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <button 
+                              onClick={async () => {
+                                const res = await fetch(`${BASE_URL}/api/students/${student.id}`);
+                                const data = await res.json();
+                                setSelectedStudent(data);
+                              }}
+                              className="text-primary hover:text-accent font-medium text-xs flex items-center gap-1 bg-primary/5 px-2 py-1 rounded-lg"
+                            >
+                              View <ChevronRight size={14} />
+                            </button>
+                            {user.role === 'admin' && (
+                              <>
+                                <button 
+                                  onClick={() => {
+                                    setEditingStudent({...student});
+                                    setShowEditStudent(true);
+                                  }}
+                                  className="text-indigo-600 hover:text-indigo-800 font-medium text-xs flex items-center gap-1 bg-indigo-50 px-2 py-1 rounded-lg"
+                                >
+                                  Edit <Edit size={14} />
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    setSelectedStudent(student);
+                                    setShowAddTransaction(true);
+                                  }}
+                                  className="text-emerald-600 hover:text-emerald-800 font-medium text-xs flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded-lg"
+                                >
+                                  Top Up <Plus size={14} />
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteStudent(student.id)}
+                                  className="text-rose-600 hover:text-rose-800 font-medium text-xs flex items-center gap-1 bg-rose-50 px-2 py-1 rounded-lg"
+                                >
+                                  Delete <Trash2 size={14} />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {filteredStudents.length === 0 && (
+                  <div className="p-12 text-center text-gray-400">No students found</div>
+                )}
+              </div>
+              </>
+            ) : studentSubTab === 'teachers' ? (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
+                      <th className="px-6 py-4 font-medium">Teacher Name</th>
+                      <th className="px-6 py-4 font-medium">Subject</th>
+                      <th className="px-6 py-4 font-medium">Username</th>
+                      <th className="px-6 py-4 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {teachers.map((teacher) => (
+                      <tr key={teacher.id} className="even:bg-gray-50/50 hover:bg-indigo-50/50 transition-all group">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs border border-indigo-50">
+                              {teacher.name?.charAt(0) || 'T'}
+                            </div>
+                            <span className="font-medium text-gray-900">{teacher.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-gray-500 text-sm">{teacher.subject}</td>
+                        <td className="px-6 py-4 text-gray-500 text-sm font-mono">{teacher.username}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            {user.role === 'admin' && (
+                              <>
+                                <button 
+                                  onClick={() => {
+                                    const admin = admins.find(a => a.teacher_id === teacher.id);
+                                    if (admin) {
+                                      setEditingUser({...admin});
+                                      setShowEditUser(true);
+                                    } else {
+                                      showToast('Login account not found for this teacher', 'error');
+                                    }
+                                  }}
+                                  className="text-indigo-600 hover:text-indigo-800 font-medium text-xs flex items-center gap-1 bg-indigo-50 px-2 py-1 rounded-lg"
+                                >
+                                  Edit Account <Edit size={14} />
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteUser({ id: admins.find(a => a.teacher_id === teacher.id)?.id, name: teacher.name, role: 'teacher', teacher_id: teacher.id })}
+                                  className="text-rose-600 hover:text-rose-800 font-medium text-xs flex items-center gap-1 bg-rose-50 px-2 py-1 rounded-lg"
+                                >
+                                  Delete <Trash2 size={14} />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {teachers.length === 0 && (
+                  <div className="p-12 text-center text-gray-400">No teachers found</div>
+                )}
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
+                      <th className="px-6 py-4 font-medium">Staff Member</th>
+                      <th className="px-6 py-4 font-medium">Username</th>
+                      <th className="px-6 py-4 font-medium">Role</th>
+                      <th className="px-6 py-4 font-medium text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {canteenStaff.map((staff) => (
+                      <tr key={staff.id} className="even:bg-gray-50/50 hover:bg-orange-50/50 transition-all group">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-xs border border-orange-50">
+                              {staff.name.charAt(0)}
+                            </div>
+                            <span className="font-medium text-gray-900">{staff.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500 font-mono">{staff.username}</td>
+                        <td className="px-6 py-4 text-sm text-gray-500">Canteen Staff</td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {user.role === 'admin' && (
+                              <>
+                                <button 
+                                  onClick={() => {
+                                    const admin = admins.find(a => a.canteen_id === staff.id);
+                                    if (admin) {
+                                      setEditingUser({...admin});
+                                      setShowEditUser(true);
+                                    } else {
+                                      showToast('Login account not found for this staff', 'error');
+                                    }
+                                  }}
+                                  className="text-indigo-600 hover:text-indigo-800 font-medium text-xs flex items-center gap-1 bg-indigo-50 px-2 py-1 rounded-lg"
+                                >
+                                  Edit Account <Edit size={14} />
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteUser({ id: admins.find(a => a.canteen_id === staff.id)?.id, name: staff.name, role: 'canteen', canteen_id: staff.id })}
+                                  className="text-rose-600 hover:text-rose-800 font-medium text-xs flex items-center gap-1 bg-rose-50 px-2 py-1 rounded-lg"
+                                >
+                                  Delete <Trash2 size={14} />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {canteenStaff.length === 0 && (
+                  <div className="p-12 text-center text-gray-400">No canteen staff found</div>
+                )}
+              </div>
             )}
-          </div>
           </>
         )}
 
@@ -3468,9 +4348,9 @@ const ShahwilayatApp = () => {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden"
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
             >
-              <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-primary text-white">
+              <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-primary text-white shrink-0">
                 <div>
                   <h3 className="text-xl font-bold">Add New Student</h3>
                   <p className="text-white/70 text-xs mt-1 font-medium">Enter student details to create a new profile</p>
@@ -3479,7 +4359,7 @@ const ShahwilayatApp = () => {
                   <X size={20} />
                 </button>
               </div>
-              <form onSubmit={handleAddStudent} className="p-8">
+              <form onSubmit={handleAddStudent} className="p-8 overflow-y-auto custom-scrollbar">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                   <div className="flex flex-col items-center space-y-4">
                     <div className="relative group">
@@ -3592,15 +4472,26 @@ const ShahwilayatApp = () => {
                         onChange={e => setNewStudent({...newStudent, parent_contact: e.target.value})}
                       />
                     </div>
+                    <div className="sm:col-span-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Account Password</label>
+                      <input 
+                        required
+                        type="password" 
+                        placeholder="Set a secure password for student login"
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all text-sm font-bold text-slate-700"
+                        value={newStudent.password}
+                        onChange={e => setNewStudent({...newStudent, password: e.target.value})}
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="mt-8 flex gap-3">
                   <button 
                     type="button"
                     onClick={() => setShowAddStudent(false)}
-                    className="flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-50 hover:bg-slate-100 transition-all"
+                    className="flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-50 hover:bg-slate-100 transition-all flex items-center justify-center gap-2"
                   >
-                    Cancel
+                    <ChevronLeft size={16} /> Back
                   </button>
                   <button 
                     type="submit" 
@@ -4456,15 +5347,198 @@ const ShahwilayatApp = () => {
           </div>
         )}
 
+        {showEditStudent && editingStudent && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden"
+            >
+              <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-primary text-white">
+                <div>
+                  <h3 className="text-xl font-bold">Edit Student Profile</h3>
+                  <p className="text-indigo-100 text-xs mt-1 font-medium">Update student information and credentials</p>
+                </div>
+                <button onClick={() => setShowEditStudent(false)} className="bg-white/10 p-2 rounded-xl text-white hover:bg-white/20 transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+              <form onSubmit={handleUpdateStudent} className="p-8 space-y-6 max-h-[70vh] overflow-y-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Full Name</label>
+                    <input 
+                      required
+                      type="text" 
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-primary outline-none transition-all text-sm font-bold text-slate-700"
+                      value={editingStudent.name}
+                      onChange={e => setEditingStudent({...editingStudent, name: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Roll Number</label>
+                    <input 
+                      required
+                      type="text" 
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-primary outline-none transition-all text-sm font-bold text-slate-700"
+                      value={editingStudent.roll_no}
+                      onChange={e => setEditingStudent({...editingStudent, roll_no: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Grade</label>
+                    <input 
+                      required
+                      type="text" 
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-primary outline-none transition-all text-sm font-bold text-slate-700"
+                      value={editingStudent.grade}
+                      onChange={e => setEditingStudent({...editingStudent, grade: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Section</label>
+                    <input 
+                      required
+                      type="text" 
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-primary outline-none transition-all text-sm font-bold text-slate-700"
+                      value={editingStudent.section}
+                      onChange={e => setEditingStudent({...editingStudent, section: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">CNIC / B-Form</label>
+                    <input 
+                      required
+                      type="text" 
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-primary outline-none transition-all text-sm font-bold text-slate-700"
+                      value={editingStudent.cnic}
+                      onChange={e => setEditingStudent({...editingStudent, cnic: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Password</label>
+                    <input 
+                      required
+                      type="text" 
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-primary outline-none transition-all text-sm font-bold text-slate-700"
+                      value={editingStudent.password}
+                      onChange={e => setEditingStudent({...editingStudent, password: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 flex gap-3">
+                  <button 
+                    type="button"
+                    onClick={() => setShowEditStudent(false)}
+                    className="flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-50 hover:bg-slate-100 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="flex-[2] py-3 bg-primary text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
+        {showEditUser && editingUser && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-indigo-600 text-white">
+                <div>
+                  <h3 className="text-xl font-bold">Edit User Account</h3>
+                  <p className="text-indigo-100 text-xs mt-1 font-medium">Update profile and credentials</p>
+                </div>
+                <button onClick={() => setShowEditUser(false)} className="bg-white/10 p-2 rounded-xl text-white hover:bg-white/20 transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+              <form onSubmit={handleUpdateUser} className="p-8 space-y-5">
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Full Name</label>
+                  <input 
+                    required
+                    type="text" 
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all text-sm font-bold text-slate-700"
+                    value={editingUser.name}
+                    onChange={e => setEditingUser({...editingUser, name: e.target.value})}
+                  />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Username</label>
+                    <input 
+                      required
+                      type="text" 
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all text-sm font-bold text-slate-700"
+                      value={editingUser.username}
+                      onChange={e => setEditingUser({...editingUser, username: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Password</label>
+                    <input 
+                      required
+                      type="password" 
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all text-sm font-bold text-slate-700"
+                      value={editingUser.password}
+                      onChange={e => setEditingUser({...editingUser, password: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                {editingUser.role === 'teacher' && (
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Subject</label>
+                    <input 
+                      type="text" 
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all text-sm font-bold text-slate-700"
+                      value={editingUser.subject || ''}
+                      onChange={e => setEditingUser({...editingUser, subject: e.target.value})}
+                    />
+                  </div>
+                )}
+
+                <div className="pt-4 flex gap-3">
+                  <button 
+                    type="button"
+                    onClick={() => setShowEditUser(false)}
+                    className="flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-400 bg-slate-50 hover:bg-slate-100 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="flex-[2] py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-600/20 hover:scale-[1.02] active:scale-95 transition-all"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+
         {showAddAdmin && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col"
             >
-              <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-indigo-600 text-white">
+              <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-indigo-600 text-white shrink-0">
                 <div>
                   <h3 className="text-xl font-bold">Create User Account</h3>
                   <p className="text-indigo-100 text-xs mt-1 font-medium">Assign roles and credentials for new users</p>
@@ -4473,7 +5547,7 @@ const ShahwilayatApp = () => {
                   <X size={20} />
                 </button>
               </div>
-              <form onSubmit={handleAddAdmin} className="p-8 space-y-5">
+              <form onSubmit={handleAddAdmin} className="p-8 space-y-5 overflow-y-auto custom-scrollbar">
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Full Name</label>
                   <input 
@@ -4517,6 +5591,7 @@ const ShahwilayatApp = () => {
                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all text-sm font-bold text-slate-700 appearance-none cursor-pointer"
                     value={newAdmin.role}
                     onChange={e => setNewAdmin({...newAdmin, role: e.target.value})}
+                    disabled={user.role !== 'admin'}
                   >
                     <option value="admin">Administrator</option>
                     <option value="teacher">Teacher</option>

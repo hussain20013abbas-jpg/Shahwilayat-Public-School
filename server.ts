@@ -108,7 +108,8 @@ try {
       role TEXT DEFAULT 'admin',
       balance REAL DEFAULT 0,
       student_id INTEGER,
-      teacher_id INTEGER
+      teacher_id INTEGER,
+      canteen_id INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS teachers (
@@ -146,7 +147,9 @@ try {
       fee_type TEXT CHECK(fee_type IN ('tuition', 'bus', 'activity', 'canteen', 'other')) DEFAULT 'other',
       description TEXT,
       date DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (student_id) REFERENCES students(id)
+      canteen_staff_id INTEGER,
+      FOREIGN KEY (student_id) REFERENCES students(id),
+      FOREIGN KEY (canteen_staff_id) REFERENCES canteen_staff(id)
     );
 
     CREATE TABLE IF NOT EXISTS announcements (
@@ -260,6 +263,12 @@ try {
   if (!adminCols.includes('balance')) {
     db.exec("ALTER TABLE admins ADD COLUMN balance REAL DEFAULT 0");
   }
+  if (!adminCols.includes('teacher_id')) {
+    db.exec("ALTER TABLE admins ADD COLUMN teacher_id INTEGER");
+  }
+  if (!adminCols.includes('canteen_id')) {
+    db.exec("ALTER TABLE admins ADD COLUMN canteen_id INTEGER");
+  }
 } catch (e) {}
 try {
   const canteenCols = db.prepare("PRAGMA table_info(canteen_staff)").all().map((c: any) => c.name);
@@ -323,6 +332,23 @@ try {
   console.log('Default admin check:', admin ? 'Found' : 'Not Found');
   if (admin) {
     console.log('Admin details:', { id: (admin as any).id, username: (admin as any).username, role: (admin as any).role });
+  }
+
+  // Ensure default teacher and canteen staff are in admins table
+  const defaultTeacher = db.prepare("SELECT id FROM teachers WHERE username = 'teacher'").get() as any;
+  if (defaultTeacher) {
+    const teacherAdmin = db.prepare("SELECT * FROM admins WHERE teacher_id = ?").get(defaultTeacher.id);
+    if (!teacherAdmin) {
+      db.prepare("INSERT OR IGNORE INTO admins (name, username, password, role, teacher_id) VALUES (?, ?, ?, ?, ?)").run('Demo Teacher', 'teacher', 'teacher123', 'teacher', defaultTeacher.id);
+    }
+  }
+
+  const defaultCanteen = db.prepare("SELECT id FROM canteen_staff WHERE username = 'canteen'").get() as any;
+  if (defaultCanteen) {
+    const canteenAdmin = db.prepare("SELECT * FROM admins WHERE canteen_id = ?").get(defaultCanteen.id);
+    if (!canteenAdmin) {
+      db.prepare("INSERT OR IGNORE INTO admins (name, username, password, role, canteen_id) VALUES (?, ?, ?, ?, ?)").run('Canteen Manager', 'canteen', 'canteen123', 'canteen', defaultCanteen.id);
+    }
   }
 } catch (e: any) {
   console.error('Error checking default admin:', e);
@@ -404,7 +430,21 @@ async function startServer() {
             id: teacher.id, 
             name: teacher.name, 
             role: 'teacher', 
+            teacher_id: teacher.id,
             balance: teacher.balance 
+          });
+        }
+      }
+
+      if (user.role === 'canteen' && user.canteen_id) {
+        const staff = db.prepare("SELECT * FROM canteen_staff WHERE id = ?").get(user.canteen_id) as any;
+        if (staff) {
+          return res.json({ 
+            id: staff.id, 
+            name: staff.name, 
+            role: 'canteen', 
+            canteen_id: staff.id,
+            balance: staff.balance 
           });
         }
       }
@@ -545,6 +585,101 @@ async function startServer() {
     }
   });
 
+  app.post("/api/teachers", (req, res) => {
+    try {
+      const { name, username, password, subject } = req.body;
+      const transaction = db.transaction(() => {
+        const result = db.prepare("INSERT INTO teachers (name, username, password, subject) VALUES (?, ?, ?, ?)").run(name, username, password, subject);
+        const teacherId = result.lastInsertRowid;
+        
+        // Create admin entry for login
+        db.prepare("INSERT INTO admins (name, username, password, role, teacher_id) VALUES (?, ?, ?, 'teacher', ?)").run(name, username, password, teacherId);
+        
+        return teacherId;
+      });
+      
+      const id = transaction();
+      res.json({ id, success: true });
+    } catch (err: any) {
+      if (err.message.includes('UNIQUE constraint failed')) {
+        return res.status(400).json({ error: "Username already exists" });
+      }
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/teachers/:id", (req, res) => {
+    const { id } = req.params;
+    const { name, username, password, subject } = req.body;
+    try {
+      const transaction = db.transaction(() => {
+        db.prepare("UPDATE teachers SET name = ?, username = ?, password = ?, subject = ? WHERE id = ?").run(name, username, password, subject, id);
+        // Update linked admin account
+        db.prepare("UPDATE admins SET name = ?, username = ?, password = ? WHERE teacher_id = ?").run(name, username, password, id);
+      });
+      
+      transaction();
+      res.json({ success: true });
+    } catch (err: any) {
+      if (err.message.includes('UNIQUE constraint failed')) {
+        return res.status(400).json({ error: "Username already exists" });
+      }
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/canteen_staff", (req, res) => {
+    try {
+      const staff = db.prepare("SELECT * FROM canteen_staff").all();
+      res.json(staff);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/canteen_staff", (req, res) => {
+    try {
+      const { name, username, password } = req.body;
+      const transaction = db.transaction(() => {
+        const result = db.prepare("INSERT INTO canteen_staff (name, username, password) VALUES (?, ?, ?)").run(name, username, password);
+        const staffId = result.lastInsertRowid;
+        
+        // Create admin entry for login
+        db.prepare("INSERT INTO admins (name, username, password, role, canteen_id) VALUES (?, ?, ?, 'canteen', ?)").run(name, username, password, staffId);
+        
+        return staffId;
+      });
+      
+      const id = transaction();
+      res.json({ id, success: true });
+    } catch (err: any) {
+      if (err.message.includes('UNIQUE constraint failed')) {
+        return res.status(400).json({ error: "Username already exists" });
+      }
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/canteen_staff/:id", (req, res) => {
+    const { id } = req.params;
+    const { name, username, password } = req.body;
+    try {
+      const transaction = db.transaction(() => {
+        db.prepare("UPDATE canteen_staff SET name = ?, username = ?, password = ? WHERE id = ?").run(name, username, password, id);
+        // Update linked admin account
+        db.prepare("UPDATE admins SET name = ?, username = ?, password = ? WHERE canteen_id = ?").run(name, username, password, id);
+      });
+      
+      transaction();
+      res.json({ success: true });
+    } catch (err: any) {
+      if (err.message.includes('UNIQUE constraint failed')) {
+        return res.status(400).json({ error: "Username already exists" });
+      }
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post("/api/admins", (req, res) => {
     try {
       const { name, username, password, role, student_id, teacher_id } = req.body;
@@ -558,10 +693,80 @@ async function startServer() {
     }
   });
 
+  app.put("/api/admins/:id", (req, res) => {
+    const { id } = req.params;
+    const { name, username, password, role, student_id, teacher_id, canteen_id } = req.body;
+    try {
+      const transaction = db.transaction(() => {
+        db.prepare("UPDATE admins SET name = ?, username = ?, password = ?, role = ?, student_id = ?, teacher_id = ?, canteen_id = ? WHERE id = ?").run(name, username, password, role, student_id || null, teacher_id || null, canteen_id || null, id);
+        
+        // Synchronize with linked profiles
+        if (student_id) {
+          db.prepare("UPDATE students SET name = ?, roll_no = ?, password = ? WHERE id = ?").run(name, username, password, student_id);
+        }
+        if (teacher_id) {
+          db.prepare("UPDATE teachers SET name = ?, username = ?, password = ? WHERE id = ?").run(name, username, password, teacher_id);
+        }
+        if (canteen_id) {
+          db.prepare("UPDATE canteen_staff SET name = ?, username = ?, password = ? WHERE id = ?").run(name, username, password, canteen_id);
+        }
+      });
+      transaction();
+      res.json({ success: true });
+    } catch (err: any) {
+      if (err.message.includes('UNIQUE constraint failed')) {
+        return res.status(400).json({ error: "Username already exists" });
+      }
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.delete("/api/admins/:id", (req, res) => {
     try {
       const { id } = req.params;
       db.prepare("DELETE FROM admins WHERE id = ?").run(id);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/students/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+      const transaction = db.transaction(() => {
+        db.prepare("DELETE FROM admins WHERE student_id = ?").run(id);
+        db.prepare("DELETE FROM students WHERE id = ?").run(id);
+      });
+      transaction();
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/teachers/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+      const transaction = db.transaction(() => {
+        db.prepare("DELETE FROM admins WHERE teacher_id = ?").run(id);
+        db.prepare("DELETE FROM teachers WHERE id = ?").run(id);
+      });
+      transaction();
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/canteen_staff/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+      const transaction = db.transaction(() => {
+        db.prepare("DELETE FROM admins WHERE canteen_id = ?").run(id);
+        db.prepare("DELETE FROM canteen_staff WHERE id = ?").run(id);
+      });
+      transaction();
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -635,10 +840,52 @@ async function startServer() {
   app.post("/api/students", (req, res) => {
     const { name, roll_no, grade, class: className, section, parent_contact, parent_email, emergency_contact, academic_notes, medical_notes, photo_url, cnic, computer_number, password } = req.body;
     try {
-      const info = db.prepare("INSERT INTO students (name, roll_no, grade, class, section, parent_contact, parent_email, emergency_contact, academic_notes, medical_notes, photo_url, cnic, computer_number, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(name, roll_no, grade, className, section, parent_contact, parent_email, emergency_contact, academic_notes, medical_notes, photo_url, cnic, computer_number, password || 'password123');
-      res.json({ id: info.lastInsertRowid });
-    } catch (err) {
-      res.status(400).json({ error: "Roll number already exists" });
+      const transaction = db.transaction(() => {
+        const info = db.prepare("INSERT INTO students (name, roll_no, grade, class, section, parent_contact, parent_email, emergency_contact, academic_notes, medical_notes, photo_url, cnic, computer_number, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(name, roll_no, grade, className, section, parent_contact, parent_email, emergency_contact, academic_notes, medical_notes, photo_url, cnic, computer_number, password || 'password123');
+        const studentId = info.lastInsertRowid;
+        
+        // Also create an admin entry for login
+        db.prepare("INSERT INTO admins (name, username, password, role, student_id) VALUES (?, ?, ?, 'student', ?)").run(name, roll_no, password || 'password123', studentId);
+        
+        return studentId;
+      });
+      
+      const id = transaction();
+      res.json({ id });
+    } catch (err: any) {
+      if (err.message.includes('UNIQUE constraint failed')) {
+        res.status(400).json({ error: "Roll number already exists" });
+      } else {
+        res.status(500).json({ error: err.message });
+      }
+    }
+  });
+
+  app.put("/api/students/:id", (req, res) => {
+    const { id } = req.params;
+    const { name, roll_no, grade, class: className, section, parent_contact, parent_email, emergency_contact, academic_notes, medical_notes, photo_url, cnic, computer_number, password } = req.body;
+    try {
+      const transaction = db.transaction(() => {
+        db.prepare(`
+          UPDATE students SET 
+            name = ?, roll_no = ?, grade = ?, class = ?, section = ?, 
+            parent_contact = ?, parent_email = ?, emergency_contact = ?, 
+            academic_notes = ?, medical_notes = ?, photo_url = ?, 
+            cnic = ?, computer_number = ?, password = ?
+          WHERE id = ?
+        `).run(name, roll_no, grade, className, section, parent_contact, parent_email, emergency_contact, academic_notes, medical_notes, photo_url, cnic, computer_number, password, id);
+        
+        // Update linked admin account
+        db.prepare("UPDATE admins SET name = ?, username = ?, password = ? WHERE student_id = ?").run(name, roll_no, password, id);
+      });
+      
+      transaction();
+      res.json({ success: true });
+    } catch (err: any) {
+      if (err.message.includes('UNIQUE constraint failed')) {
+        return res.status(400).json({ error: "Username or Roll No already exists" });
+      }
+      res.status(500).json({ error: err.message });
     }
   });
 
@@ -675,7 +922,7 @@ async function startServer() {
   });
 
   app.post("/api/transactions", (req, res) => {
-    const { student_id, amount, type, fee_type, description, password } = req.body;
+    const { student_id, amount, type, fee_type, description, password, canteen_staff_id } = req.body;
     
     try {
       if (fee_type === 'canteen' && type === 'debit' && description === 'Canteen Snack Purchase') {
@@ -686,12 +933,17 @@ async function startServer() {
       }
 
       const transaction = db.transaction(() => {
-        db.prepare("INSERT INTO transactions (student_id, amount, type, fee_type, description) VALUES (?, ?, ?, ?, ?)").run(student_id, amount, type, fee_type, description);
+        db.prepare("INSERT INTO transactions (student_id, amount, type, fee_type, description, canteen_staff_id) VALUES (?, ?, ?, ?, ?, ?)").run(student_id, amount, type, fee_type, description, canteen_staff_id || null);
         
         if (type === 'credit') {
           db.prepare("UPDATE students SET balance = balance + ? WHERE id = ?").run(amount, student_id);
         } else {
           db.prepare("UPDATE students SET balance = balance - ? WHERE id = ?").run(amount, student_id);
+        }
+
+        // If it's a canteen purchase, also update the canteen staff's balance (total sales)
+        if (fee_type === 'canteen' && type === 'debit' && canteen_staff_id) {
+          db.prepare("UPDATE canteen_staff SET balance = balance + ? WHERE id = ?").run(amount, canteen_staff_id);
         }
       });
 
@@ -716,6 +968,26 @@ async function startServer() {
     try {
       const { title, content, category } = req.body;
       db.prepare("INSERT INTO announcements (title, content, category) VALUES (?, ?, ?)").run(title, content, category);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Academic Records
+  app.get("/api/academic_records", (req, res) => {
+    try {
+      const records = db.prepare("SELECT * FROM academic_records").all();
+      res.json(records);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/academic_records", (req, res) => {
+    try {
+      const { student_id, subject, marks, total_marks, term } = req.body;
+      db.prepare("INSERT INTO academic_records (student_id, subject, marks, total_marks, term) VALUES (?, ?, ?, ?, ?)").run(student_id, subject, marks, total_marks, term);
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });

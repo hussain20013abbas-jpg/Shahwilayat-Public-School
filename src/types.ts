@@ -26,6 +26,8 @@ export interface User {
   name: string;
   role: 'admin' | 'student' | 'canteen' | 'guest' | 'teacher';
   student_id?: number;
+  teacher_id?: number;
+  canteen_id?: number;
   computer_number?: string;
 }
 
