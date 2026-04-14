@@ -6,7 +6,7 @@
 
 This contains everything you need to run your app locally.
 
-View your app in AI Studio: https://ai.studio/apps/9c118cf5-783d-445f-8f6c-69ddec964974
+View your app in AI Studio: https://shahwilayat.school.pk
 
 ## Run Locally
 
