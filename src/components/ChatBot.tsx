@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MessageSquare, X, Send, Bot, User, Loader2, Minimize2, Maximize2 } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
 
 interface Message {
   role: 'user' | 'model';
@@ -10,7 +9,7 @@ interface Message {
 
 interface ChatBotProps {
   studentData?: any;
-  userType: 'student' | 'admin' | 'canteen' | null;
+  userType: 'student' | 'admin' | 'canteen' | 'teacher' | 'guest' | null;
 }
 
 export const ChatBot: React.FC<ChatBotProps> = ({ studentData, userType }) => {
@@ -30,39 +29,8 @@ export const ChatBot: React.FC<ChatBotProps> = ({ studentData, userType }) => {
     scrollToBottom();
   }, [messages]);
 
-  useEffect(() => {
-    // Initialize chat session when component mounts or user data changes
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-    const systemInstruction = `
-      You are the Shahwilayat Public School AI Assistant. 
-      Your goal is to help students, parents, and staff with their queries.
-      
-      Context:
-      - Current User Type: ${userType || 'Guest'}
-      ${studentData ? `- Logged in Student: ${studentData.name} (Roll No: ${studentData.roll_no})` : ''}
-      ${studentData ? `- Current Balance: Rs. ${studentData.balance}` : ''}
-      ${studentData ? `- Attendance: ${studentData.attendance_percentage}%` : ''}
-      ${studentData ? `- Grade: ${studentData.grade}, Class: ${studentData.class}, Section: ${studentData.section}` : ''}
-      
-      Guidelines:
-      - Be professional, helpful, and polite.
-      - If asked about balance or attendance, use the provided context.
-      - If asked about school policies, provide general helpful information.
-      - If you don't know something, suggest contacting the school administration.
-      - Keep responses concise and clear.
-      - Remember previous parts of this conversation.
-    `;
-
-    chatSessionRef.current = ai.chats.create({
-      model: "gemini-3-flash-preview",
-      config: {
-        systemInstruction: systemInstruction,
-      }
-    });
-  }, [userType, studentData]);
-
   const handleSend = async () => {
-    if (!input.trim() || isLoading || !chatSessionRef.current) return;
+    if (!input.trim() || isLoading) return;
 
     const userMessage = input.trim();
     setInput('');
@@ -70,12 +38,54 @@ export const ChatBot: React.FC<ChatBotProps> = ({ studentData, userType }) => {
     setIsLoading(true);
 
     try {
-      const response = await chatSessionRef.current.sendMessage({ message: userMessage });
-      const aiText = response.text || "I'm sorry, I couldn't process that request.";
+      const systemInstruction = `
+        You are the Shahwilayat Public School AI Assistant. 
+        Your goal is to help students, parents, and staff with their queries.
+        
+        School Context:
+        - App Name: SWPS Communication and Canteen Portal
+        - Current User Type: ${userType || 'Guest'}
+        - Features Available:
+          * Canteen: Menu ordering, balance management, transaction history.
+          * Communication: Post announcements (Feed), Messages (Mailbox).
+          * Events: School calendar with holidays, exams, and PTMs.
+          * Profiles: Academic progress tracking, parent contact info.
+        
+        User Context:
+        ${studentData ? `- Logged in Student: ${studentData.name} (Roll No: ${studentData.roll_no})` : ''}
+        ${studentData ? `- Current Balance: Rs. ${studentData.balance}` : ''}
+        ${studentData ? `- Attendance: ${studentData.attendance_percentage}%` : ''}
+        ${studentData ? `- Grade: ${studentData.grade}, Class: ${studentData.class}, Section: ${studentData.section}` : ''}
+        
+        Guidelines:
+        - Be professional, helpful, and polite.
+        - If asked about balance or attendance, use the provided student context.
+        - If asked about canteen items, remind them they can order via the "Canteen Menu" tab.
+        - If asked about upcoming events, suggest checking the "Events" tab on the dashboard.
+        - If asked about messages, guide them to the "Mailbox" tab.
+        - If you don't know something, suggest contacting the school administration at info@shawilayat.edu.pk.
+        - Keep responses concise and clear.
+      `;
+
+      const response = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          message: userMessage,
+          systemInstruction: systemInstruction 
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get response from server');
+      }
+
+      const data = await response.json();
+      const aiText = data.text || "I'm sorry, I couldn't process that request.";
       setMessages(prev => [...prev, { role: 'model', text: aiText }]);
     } catch (error) {
       console.error('ChatBot Error:', error);
-      setMessages(prev => [...prev, { role: 'model', text: "I'm having trouble connecting right now. Please try again later." }]);
+      setMessages(prev => [...prev, { role: 'model', text: "I'm having trouble connecting to the school's AI right now. Please try again later." }]);
     } finally {
       setIsLoading(false);
     }

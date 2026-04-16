@@ -7,6 +7,7 @@ import {
   ArrowUpRight, 
   ArrowDownLeft, 
   History, 
+  HelpCircle,
   GraduationCap,
   LayoutDashboard,
   Settings,
@@ -61,12 +62,12 @@ import {
   ArrowLeft,
   ShieldCheck,
   Moon,
+  Sun,
   DollarSign,
   Hash
 } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
 import { motion, AnimatePresence } from 'motion/react';
-import { Student, Transaction, DashboardStats, Announcement, Syllabus, Schedule, OnlineClass, User, HomeworkClasswork, Datesheet } from './types';
+import { Student, Transaction, DashboardStats, Announcement, Syllabus, Schedule, OnlineClass, User, HomeworkClasswork, Datesheet, SchoolEvent } from './types';
 
 import { 
   PieChart as RePieChart, 
@@ -78,15 +79,20 @@ import {
   Bar,
   XAxis,
   YAxis,
-  CartesianGrid
+  CartesianGrid,
+  LineChart, 
+  Line, 
+  Tooltip, 
+  AreaChart,
+  Area,
+  Legend
 } from 'recharts';
 import { ChatBot } from './components/ChatBot';
 import { VoiceChat } from './components/VoiceChat';
 import { QRScanner } from './components/QRScanner';
 import { Logo } from './components/Logo';
 
-// Use relative path for API calls so it works automatically on Vercel and local dev
-const BASE_URL = '';
+const BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || '';
 
 const LoadingSpinner = () => (
   <div className="flex justify-center items-center h-64">
@@ -95,7 +101,7 @@ const LoadingSpinner = () => (
 );
 
 const ShahwilayatApp = () => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'students' | 'finance' | 'fees' | 'canteen' | 'news' | 'mail' | 'syllabus' | 'schedules' | 'online' | 'attendance' | 'homework' | 'datesheets' | 'results' | 'about' | 'admins' | 'profile' | 'ai' | 'events'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'students' | 'finance' | 'fees' | 'canteen' | 'news' | 'mail' | 'syllabus' | 'schedules' | 'online' | 'attendance' | 'homework' | 'datesheets' | 'results' | 'about' | 'admins' | 'profile' | 'ai' | 'events' | 'help'>('dashboard');
   const [showLaunchpad, setShowLaunchpad] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [loginForm, setLoginForm] = useState({ username: '', password: '', email: '' });
@@ -109,6 +115,8 @@ const ShahwilayatApp = () => {
   const [teachers, setTeachers] = useState<any[]>([]);
   const [admins, setAdmins] = useState<any[]>([]);
   const [canteenStaff, setCanteenStaff] = useState<any[]>([]);
+  const [canteenItems, setCanteenItems] = useState<any[]>([]);
+  const [events, setEvents] = useState<SchoolEvent[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [syllabus, setSyllabus] = useState<Syllabus[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
@@ -125,6 +133,7 @@ const ShahwilayatApp = () => {
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [showAddTransaction, setShowAddTransaction] = useState(false);
   const [showAddAnnouncement, setShowAddAnnouncement] = useState(false);
+  const [showAddEvent, setShowAddEvent] = useState(false);
   const [showAddGrade, setShowAddGrade] = useState(false);
   const [showAddHomework, setShowAddHomework] = useState(false);
   const [showAddDatesheet, setShowAddDatesheet] = useState(false);
@@ -138,17 +147,49 @@ const ShahwilayatApp = () => {
   const [showAddFeeStructure, setShowAddFeeStructure] = useState(false);
   const [showAddMessage, setShowAddMessage] = useState(false);
   const [showReceipt, setShowReceipt] = useState<Transaction | null>(null);
-  const [messageForm, setMessageForm] = useState({ receiver_id: '', title: '', content: '' });
+  const [messageForm, setMessageForm] = useState({ 
+    receiver_id: '', 
+    receiver_grade: '', 
+    receiver_class: '', 
+    receiver_section: '', 
+    title: '', 
+    content: '',
+    target_type: 'individual' as 'individual' | 'grade' | 'class' | 'section' | 'all'
+  });
   const [showTopUp, setShowTopUp] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState('');
   const [topUpProcessing, setTopUpProcessing] = useState(false);
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [currentDate, setCurrentDate] = useState(new Date());
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
+  };
+
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const days = [];
+    
+    // Padding for the first week
+    for (let i = 0; i < firstDay.getDay(); i++) {
+      days.push(null);
+    }
+    
+    for (let i = 1; i <= lastDay.getDate(); i++) {
+      days.push(new Date(year, month, i));
+    }
+    
+    return days;
+  };
+
+  const formatMonth = (date: Date) => {
+    return date.toLocaleString('default', { month: 'long', year: 'numeric' });
   };
 
   // Form states
@@ -156,6 +197,7 @@ const ShahwilayatApp = () => {
   const [newStudent, setNewStudent] = useState({ name: '', roll_no: '', grade: '', class: '', section: '', parent_contact: '', parent_email: '', emergency_contact: '', academic_notes: '', medical_notes: '', photo_url: '', cnic: '', computer_number: '', password: '' });
   const [newTransaction, setNewTransaction] = useState({ student_id: '', amount: '', type: 'credit' as 'credit' | 'debit', fee_type: 'tuition' as any, description: '' });
   const [newAnnouncement, setNewAnnouncement] = useState({ title: '', content: '', category: 'General' as any, target_role: 'all', image_url: '', is_featured: false });
+  const [newEvent, setNewEvent] = useState({ title: '', date: '', time: '', location: '', description: '', category: 'other' as any });
   const [newGrade, setNewGrade] = useState({ subject: '', marks: '', total_marks: '', term: '' });
   const [newHomework, setNewHomework] = useState({ type: 'Homework' as 'Homework' | 'Classwork', grade: '', class: '', section: '', subject: '', content: '', date_due: '' });
   const [newDatesheet, setNewDatesheet] = useState({ exam_name: '', grade: '', subject: '', date: '', time: '' });
@@ -182,6 +224,20 @@ const ShahwilayatApp = () => {
   const [canteenPassword, setCanteenPassword] = useState('');
   const [academicRecords, setAcademicRecords] = useState<any[]>([]);
 
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('swps_dark_mode');
+    return saved === 'true';
+  });
+
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('swps_dark_mode', darkMode.toString());
+  }, [darkMode]);
+
   const [aiInput, setAiInput] = useState('');
   const [aiResponse, setAiResponse] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -191,16 +247,28 @@ const ShahwilayatApp = () => {
     if (!aiInput.trim()) return;
     
     setIsAiLoading(true);
+    setAiResponse('');
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: aiInput,
+      const response = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          message: aiInput,
+          systemInstruction: 'You are the Shahwilayat Public School AI Assistant. Provide helpful information about school matters.'
+        })
       });
-      setAiResponse(response.text || 'No response generated.');
-    } catch (error) {
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to get response from server');
+      }
+
+      const data = await response.json();
+      setAiResponse(data.text || 'No response generated.');
+    } catch (error: any) {
       console.error('AI Error:', error);
-      setAiResponse('Error connecting to Gemini AI.');
+      setAiResponse(error.message || 'Error connecting to Gemini AI Proxy.');
+      showToast('AI Error: ' + (error.message || 'Check console for details'), 'error');
     } finally {
       setIsAiLoading(false);
     }
@@ -384,8 +452,10 @@ const ShahwilayatApp = () => {
         { key: 'admins', url: `${BASE_URL}/api/admins` },
         { key: 'teachers', url: `${BASE_URL}/api/teachers` },
         { key: 'messages', url: `${BASE_URL}/api/messages?userId=${user?.id}&role=${user?.role}` },
+        { key: 'canteenItems', url: `${BASE_URL}/api/canteen-items` },
         { key: 'feeStructures', url: `${BASE_URL}/api/fee-structures` },
-        { key: 'academicRecords', url: `${BASE_URL}/api/academic_records` }
+        { key: 'academicRecords', url: `${BASE_URL}/api/academic_records` },
+        { key: 'events', url: `${BASE_URL}/api/events` }
       ];
       
       const results = await Promise.all(endpoints.map(async (endpoint) => {
@@ -413,11 +483,13 @@ const ShahwilayatApp = () => {
       if (results[9]) setAdmins(results[9]);
       if (results[10]) setTeachers(results[10]);
       if (results[11]) setMessages(results[11]);
-      if (results[12]) setFeeStructures(results[12]);
-      if (results[13]) setCanteenStaff(results[13]);
+      if (results[12]) setCanteenItems(results[12]);
+      if (results[13]) setFeeStructures(results[13]);
       if (results[14]) setAcademicRecords(results[14]);
+      if (results[15]) setEvents(results[15]);
     } catch (error: any) {
       console.error('Error in fetchData:', error);
+      showToast('Failed to sync data with server. Please check your connection.', 'error');
     } finally {
       setLoading(false);
     }
@@ -478,14 +550,18 @@ const ShahwilayatApp = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newStudent)
       });
+      const data = await res.json();
       if (res.ok) {
         showToast('Student registered successfully!', 'success');
         setShowAddStudent(false);
         setNewStudent({ name: '', roll_no: '', grade: '', class: '', section: '', parent_contact: '', parent_email: '', emergency_contact: '', academic_notes: '', medical_notes: '', photo_url: '', cnic: '', computer_number: '', password: '' });
         fetchData();
+      } else {
+        showToast(data.error || 'Failed to register student. Please try again.', 'error');
       }
     } catch (error) {
       console.error('Error adding student:', error);
+      showToast('Network error. Please check your connection.', 'error');
     }
   };
 
@@ -517,6 +593,40 @@ const ShahwilayatApp = () => {
       }
     } catch (error) {
       console.error('Error adding transaction:', error);
+    }
+  };
+
+  const handleAddEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await fetch(`${BASE_URL}/api/events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newEvent)
+      });
+      if (res.ok) {
+        showToast('Event added successfully');
+        setShowAddEvent(false);
+        setNewEvent({ title: '', date: '', time: '', location: '', description: '', category: 'other' });
+        fetchData();
+      }
+    } catch (error) {
+      showToast('Failed to add event', 'error');
+    }
+  };
+
+  const handleDeleteEvent = async (id: number) => {
+    if (!window.confirm('Are you sure you want to delete this event?')) return;
+    try {
+      const res = await fetch(`${BASE_URL}/api/events/${id}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        showToast('Event deleted successfully');
+        fetchData();
+      }
+    } catch (error) {
+      showToast('Failed to delete event', 'error');
     }
   };
 
@@ -872,14 +982,17 @@ const ShahwilayatApp = () => {
         body: JSON.stringify({
           sender_id: user?.id,
           sender_role: user?.role,
-          receiver_id: messageForm.receiver_id || null,
+          receiver_id: messageForm.target_type === 'individual' ? messageForm.receiver_id : null,
+          receiver_grade: ['grade', 'class', 'section'].includes(messageForm.target_type) ? messageForm.receiver_grade : null,
+          receiver_class: ['class', 'section'].includes(messageForm.target_type) ? messageForm.receiver_class : null,
+          receiver_section: messageForm.target_type === 'section' ? messageForm.receiver_section : null,
           title: messageForm.title,
           content: messageForm.content
         })
       });
       if (res.ok) {
         setShowAddMessage(false);
-        setMessageForm({ receiver_id: '', title: '', content: '' });
+        setMessageForm({ receiver_id: '', receiver_grade: '', receiver_class: '', receiver_section: '', title: '', content: '', target_type: 'individual' });
         fetchData();
         showToast('Message sent successfully!', 'success');
       } else {
@@ -1170,6 +1283,7 @@ const ShahwilayatApp = () => {
     { id: 'ai', icon: Bot, label: 'AI Assistant', roles: ['admin', 'student', 'canteen', 'teacher'], color: 'bg-primary text-white' },
     { id: 'profile', icon: UserIcon, label: 'My Profile', roles: ['admin', 'student', 'canteen', 'teacher'], color: 'bg-slate-600 text-white' },
     { id: 'about', icon: Info, label: 'About Us', roles: ['admin', 'student', 'canteen', 'teacher'], color: 'bg-slate-800 text-white' },
+    { id: 'help', icon: HelpCircle, label: 'Help & Deployment', roles: ['admin'], color: 'bg-slate-600 text-white' },
   ];
 
   return (
@@ -1204,6 +1318,25 @@ const ShahwilayatApp = () => {
               <span className="text-[9px] font-black text-primary uppercase tracking-widest">{user.role}</span>
             </div>
             
+            <button 
+              onClick={() => {
+                navigator.clipboard.writeText(window.location.href);
+                showToast('App link copied to clipboard!', 'success');
+              }} 
+              className="p-3 bg-white text-slate-400 rounded-2xl hover:text-primary hover:shadow-xl hover:shadow-primary/10 transition-all border border-slate-100 shadow-sm"
+              title="Copy App Link"
+            >
+              <Copy size={20} />
+            </button>
+
+            <button 
+              onClick={() => setDarkMode(!darkMode)} 
+              className="p-3 bg-white text-slate-400 rounded-2xl hover:text-primary hover:shadow-xl hover:shadow-primary/10 transition-all border border-slate-100 shadow-sm"
+              title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            >
+              {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
+
             <button 
               onClick={() => fetchData()} 
               className="p-3 bg-white text-slate-400 rounded-2xl hover:text-primary hover:shadow-xl hover:shadow-primary/10 transition-all border border-slate-100 shadow-sm"
@@ -1372,6 +1505,14 @@ const ShahwilayatApp = () => {
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Emergency Contact</p>
                         <p className="text-lg font-black text-dark">{selectedStudent.emergency_contact || 'N/A'}</p>
                       </div>
+                      <div>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Parent Email</p>
+                        <p className="text-lg font-black text-dark">{selectedStudent.parent_email || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">CNIC / B-Form</p>
+                        <p className="text-lg font-black text-dark">{selectedStudent.cnic || 'N/A'}</p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1396,6 +1537,65 @@ const ShahwilayatApp = () => {
                     )}
                   </div>
                 )}
+
+                <div className="mt-12 pt-12 border-t border-slate-50">
+                  <h4 className="text-2xl font-black text-dark tracking-tight mb-8 flex items-center gap-3">
+                    <Award size={24} className="text-amber-500" /> Academic Progress Tracking
+                  </h4>
+                  <div className="h-[400px] w-full bg-slate-50/50 rounded-[2.5rem] p-8 border border-slate-100">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={academicRecords.filter(r => r.student_id === selectedStudent.id)}>
+                        <defs>
+                          <linearGradient id="colorPercentage" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                        <XAxis 
+                          dataKey="subject" 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{ fontSize: 10, fontWeight: 800, fill: '#94a3b8' }}
+                        />
+                        <YAxis 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{ fontSize: 10, fontWeight: 800, fill: '#94a3b8' }}
+                          domain={[0, 100]}
+                        />
+                        <Tooltip 
+                          contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', fontWeight: 800 }}
+                        />
+                        <Area 
+                          type="monotone" 
+                          dataKey={(r) => (r.marks / r.total_marks) * 100} 
+                          name="Percentage"
+                          stroke="#6366f1" 
+                          strokeWidth={4}
+                          fillOpacity={1} 
+                          fill="url(#colorPercentage)" 
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
+                    {academicRecords.filter(r => r.student_id === selectedStudent.id).map((record, idx) => (
+                      <div key={idx} className="p-6 bg-white rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
+                        <div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{record.subject}</p>
+                          <p className="text-lg font-black text-dark">{record.marks}/{record.total_marks}</p>
+                        </div>
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-sm ${
+                          (record.marks / record.total_marks) >= 0.8 ? 'bg-emerald-50 text-emerald-600' :
+                          (record.marks / record.total_marks) >= 0.5 ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'
+                        }`}>
+                          {Math.round((record.marks / record.total_marks) * 100)}%
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
 
                 <div className="mt-12 pt-12 border-t border-slate-50 flex justify-center">
                   <button 
@@ -2284,6 +2484,85 @@ const ShahwilayatApp = () => {
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* Canteen Menu Management / View */}
+                    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                      <div className="flex justify-between items-center mb-6">
+                        <h4 className="font-bold text-gray-900 flex items-center gap-2">
+                          <Coffee size={18} className="text-primary" />
+                          Todays Menu
+                        </h4>
+                        {user.role === 'admin' && (
+                          <button 
+                            className="text-primary text-xs font-bold uppercase tracking-widest hover:underline"
+                            onClick={() => {
+                              const name = window.prompt('Item Name:');
+                              const price = window.prompt('Price:');
+                              const category = window.prompt('Category:');
+                              if (name && price && category) {
+                                fetch(`${BASE_URL}/api/canteen-items`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ name, price: parseFloat(price), category, description: 'Fresh item', image_url: `https://picsum.photos/seed/${name}/400/300` })
+                                }).then(() => fetchData());
+                              }
+                            }}
+                          >
+                            Add New Item
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {canteenItems.map((item, i) => (
+                          <div key={item.id} className="group relative bg-gray-50 rounded-2xl p-4 flex gap-4 hover:shadow-lg transition-all border border-transparent hover:border-primary/20">
+                            <div className="w-16 h-16 rounded-xl overflow-hidden bg-white shadow-inner flex-shrink-0">
+                              <img src={item.image_url} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex justify-between items-start">
+                                <h5 className="font-bold text-gray-900 text-sm">{item.name}</h5>
+                                <span className="text-xs font-black text-primary">Rs. {item.price}</span>
+                              </div>
+                              <p className="text-[10px] text-gray-500 mt-1 line-clamp-1">{item.description}</p>
+                              <div className="mt-2 flex items-center justify-between">
+                                <span className="text-[8px] font-black uppercase tracking-widest bg-white px-2 py-0.5 rounded-full text-slate-400 border border-slate-100">
+                                  {item.category}
+                                </span>
+                                {user.role === 'admin' && (
+                                  <button 
+                                    onClick={() => {
+                                      if (window.confirm('Delete this item?')) {
+                                        fetch(`${BASE_URL}/api/canteen-items/${item.id}`, { method: 'DELETE' }).then(() => fetchData());
+                                      }
+                                    }}
+                                    className="text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                )}
+                                {user.role === 'student' && (
+                                  <button 
+                                    onClick={() => {
+                                      setCanteenAmount(item.price.toString());
+                                      showToast(`${item.name} selected. Enter password to complete.`);
+                                    }}
+                                    className="text-primary text-[10px] font-black uppercase tracking-widest hover:underline"
+                                  >
+                                    Order
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {canteenItems.length === 0 && (
+                          <div className="col-span-full py-12 text-center text-slate-400 text-xs font-medium">
+                            No items in the menu today.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
                   <div className="space-y-6">
                     <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100">
                       <h4 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
@@ -3348,6 +3627,110 @@ const ShahwilayatApp = () => {
           </div>
         )}
 
+        {activeTab === 'help' && user.role === 'admin' && (
+          <div className="max-w-4xl mx-auto space-y-12">
+            <div className="text-center space-y-4">
+              <h2 className="text-4xl font-black text-dark tracking-tight">Help & Deployment Center</h2>
+              <p className="text-slate-500 font-medium text-lg">Everything you need to manage and deploy your portal</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="premium-card">
+                <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-6">
+                  <Globe size={24} />
+                </div>
+                <h4 className="font-black text-dark mb-4 text-xl">App URL & Sharing</h4>
+                <p className="text-slate-500 text-sm leading-relaxed mb-6">
+                  Your application is currently hosted at the URL below. You can share this link with students and staff.
+                </p>
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-6 break-all font-mono text-xs text-indigo-600">
+                  {window.location.href}
+                </div>
+                <button 
+                  onClick={() => {
+                    navigator.clipboard.writeText(window.location.href);
+                    showToast('Link copied!', 'success');
+                  }}
+                  className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-600/20"
+                >
+                  <Copy size={18} /> Copy Small URL
+                </button>
+              </div>
+
+              <div className="premium-card">
+                <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mb-6">
+                  <Settings size={24} />
+                </div>
+                <h4 className="font-black text-dark mb-4 text-xl">Deployment Info</h4>
+                <p className="text-slate-500 text-sm leading-relaxed mb-6">
+                  To deploy this app on platforms like Vercel or Netlify, ensure you set the following environment variables:
+                </p>
+                <ul className="space-y-3 text-sm font-bold text-slate-600">
+                  <li className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    GEMINI_API_KEY (for AI features)
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    APP_URL (your production domain)
+                  </li>
+                </ul>
+                <div className="mt-8 pt-8 border-t border-slate-50">
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mb-4">GitHub Integration</p>
+                  <button className="w-full flex items-center justify-center gap-2 bg-dark text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-primary transition-all shadow-xl shadow-dark/10">
+                    Connect GitHub Repository
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="premium-card bg-mesh">
+              <div className="flex items-center gap-4 mb-8">
+                <div className="p-4 bg-primary/10 text-primary rounded-[1.5rem]">
+                  <Search size={32} />
+                </div>
+                <div>
+                  <h4 className="font-black text-dark text-xl">SEO & Google Search</h4>
+                  <p className="text-slate-500 text-sm font-medium">Making your portal discoverable</p>
+                </div>
+              </div>
+              <p className="text-slate-600 text-sm leading-relaxed mb-8">
+                We've already added SEO meta tags to your portal. To improve your ranking on Google:
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {[
+                  { title: 'Meta Tags', desc: 'Title, description, and keywords are already in index.html' },
+                  { title: 'Sitemap', desc: 'Generate a sitemap.xml to help Google crawl your pages' },
+                  { title: 'Search Console', desc: 'Submit your URL to Google Search Console for faster indexing' }
+                ].map((item, i) => (
+                  <div key={i} className="p-6 bg-white/50 backdrop-blur-sm rounded-3xl border border-white/50">
+                    <h5 className="font-black text-dark text-sm mb-2">{item.title}</h5>
+                    <p className="text-slate-500 text-xs leading-relaxed">{item.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="premium-card border-emerald-100 bg-emerald-50/30">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="p-3 bg-emerald-500 text-white rounded-2xl">
+                  <Globe size={24} />
+                </div>
+                <h4 className="font-black text-emerald-900 text-xl">Environmentally Friendly</h4>
+              </div>
+              <p className="text-emerald-800/70 text-sm leading-relaxed mb-6">
+                Our portal is designed with efficiency in mind. By using Dark Mode, you can save up to 30% energy on OLED screens. We also minimize server requests to reduce our carbon footprint.
+              </p>
+              <button 
+                onClick={() => setDarkMode(!darkMode)}
+                className="flex items-center gap-2 px-8 py-4 bg-emerald-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20"
+              >
+                {darkMode ? <Sun size={18} /> : <Moon size={18} />} {darkMode ? 'Switch to Light' : 'Switch to Dark'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'about' && (
           <div className="max-w-4xl mx-auto space-y-12">
             <div className="text-center space-y-4">
@@ -3440,22 +3823,152 @@ const ShahwilayatApp = () => {
             <div className="flex justify-between items-center bg-gradient-to-r from-rose-500 to-accent p-8 rounded-[2.5rem] text-white shadow-xl shadow-rose-500/20 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32 blur-3xl" />
               <div className="relative z-10">
-                <h2 className="text-3xl font-black tracking-tight mb-2">Upcoming Events</h2>
-                <p className="text-rose-100 font-medium opacity-80">Stay updated with school activities and important dates</p>
+                <h2 className="text-3xl font-black tracking-tight mb-2">School Calendar</h2>
+                <p className="text-rose-100 font-medium opacity-80">Events, Holidays, and Important Dates</p>
               </div>
-              <div className="relative z-10 bg-white/20 p-5 rounded-3xl backdrop-blur-xl border border-white/20 shadow-inner">
-                <Calendar size={32} className="text-white" />
+              <div className="flex gap-4 relative z-10">
+                {(user.role === 'admin' || user.role === 'teacher') && (
+                  <button 
+                    onClick={() => setShowAddEvent(true)}
+                    className="bg-white/20 p-4 rounded-2xl backdrop-blur-xl border border-white/20 shadow-inner hover:bg-white/30 transition-all flex items-center gap-2 font-bold text-sm"
+                  >
+                    <Plus size={20} /> Add Event
+                  </button>
+                )}
+                <div className="bg-white/20 p-5 rounded-3xl backdrop-blur-xl border border-white/20 shadow-inner">
+                  <Calendar size={32} className="text-white" />
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {/* Events will be populated by admin */}
-              <div className="col-span-full py-32 text-center bg-white/50 rounded-[3rem] border-2 border-dashed border-slate-200 backdrop-blur-sm">
-                <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Calendar size={48} className="text-slate-300" />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2 premium-card">
+                <div className="flex justify-between items-center mb-8">
+                  <h3 className="text-xl font-black text-dark tracking-tight">{formatMonth(currentDate)}</h3>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))}
+                      className="p-2 hover:bg-slate-100 rounded-xl transition-all"
+                    >
+                      <ChevronLeft size={20} />
+                    </button>
+                    <button 
+                      onClick={() => setCurrentDate(new Date())}
+                      className="px-4 py-2 text-xs font-black uppercase tracking-widest text-primary hover:bg-primary/5 rounded-xl transition-all"
+                    >
+                      Today
+                    </button>
+                    <button 
+                      onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))}
+                      className="p-2 hover:bg-slate-100 rounded-xl transition-all"
+                    >
+                      <ChevronRight size={20} />
+                    </button>
+                  </div>
                 </div>
-                <p className="text-slate-400 font-black uppercase tracking-widest">No upcoming events scheduled</p>
-                <p className="text-slate-300 text-xs mt-2 font-bold uppercase tracking-widest">Check back later for updates</p>
+
+                <div className="grid grid-cols-7 gap-2">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                    <div key={day} className="text-center text-[10px] font-black text-slate-400 uppercase tracking-widest py-2">
+                      {day}
+                    </div>
+                  ))}
+                  {getDaysInMonth(currentDate).map((date, i) => {
+                    const isToday = date && date.toDateString() === new Date().toDateString();
+                    const dayEvents = date ? events.filter(e => new Date(e.date).toDateString() === date.toDateString()) : [];
+                    const dayExams = date ? datesheets.filter(d => new Date(d.date).toDateString() === date.toDateString()) : [];
+                    
+                    return (
+                      <div 
+                        key={i} 
+                        className={`min-h-[100px] p-2 rounded-2xl border transition-all ${
+                          !date ? 'bg-transparent border-transparent' : 
+                          isToday ? 'bg-primary/5 border-primary/20 shadow-inner' : 
+                          'bg-white border-slate-50 hover:border-slate-200 hover:shadow-lg'
+                        }`}
+                      >
+                        {date && (
+                          <>
+                            <span className={`text-sm font-black ${isToday ? 'text-primary' : 'text-slate-600'}`}>
+                              {date.getDate()}
+                            </span>
+                            <div className="mt-2 space-y-1">
+                              {dayEvents.map(e => (
+                                <div 
+                                  key={e.id} 
+                                  className={`text-[8px] font-black p-1 rounded-lg truncate ${
+                                    e.category === 'holiday' ? 'bg-rose-50 text-rose-600' :
+                                    e.category === 'academic' ? 'bg-indigo-50 text-indigo-600' :
+                                    'bg-emerald-50 text-emerald-600'
+                                  }`}
+                                  title={e.title}
+                                >
+                                  {e.title}
+                                </div>
+                              ))}
+                              {dayExams.map(d => (
+                                <div 
+                                  key={d.id} 
+                                  className="text-[8px] font-black p-1 rounded-lg bg-amber-50 text-amber-600 truncate"
+                                  title={`Exam: ${d.subject}`}
+                                >
+                                  Exam: {d.subject}
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="premium-card">
+                  <h4 className="text-lg font-black text-dark mb-6 flex items-center gap-2">
+                    <Bell size={20} className="text-primary" /> Upcoming This Month
+                  </h4>
+                  <div className="space-y-4">
+                    {events
+                      .filter(e => new Date(e.date).getMonth() === currentDate.getMonth() && new Date(e.date).getFullYear() === currentDate.getFullYear())
+                      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                      .slice(0, 5)
+                      .map(e => (
+                        <div key={e.id} className="flex gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 group hover:bg-white hover:shadow-xl transition-all">
+                          <div className="flex flex-col items-center justify-center w-12 h-12 bg-white rounded-xl shadow-sm group-hover:bg-primary group-hover:text-white transition-all">
+                            <span className="text-[10px] font-black uppercase">{new Date(e.date).toLocaleString('default', { month: 'short' })}</span>
+                            <span className="text-lg font-black leading-none">{new Date(e.date).getDate()}</span>
+                          </div>
+                          <div className="flex-1">
+                            <h5 className="font-black text-dark text-sm">{e.title}</h5>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{e.time || 'All Day'} • {e.location || 'School'}</p>
+                          </div>
+                          {user.role === 'admin' && (
+                            <button 
+                              onClick={() => handleDeleteEvent(e.id)}
+                              className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    {events.filter(e => new Date(e.date).getMonth() === currentDate.getMonth()).length === 0 && (
+                      <p className="text-center py-8 text-slate-400 font-bold text-xs uppercase tracking-widest">No events this month</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="premium-card bg-indigo-600 text-white">
+                  <h4 className="text-lg font-black mb-4">Parent-Teacher Meetings</h4>
+                  <p className="text-indigo-100 text-sm leading-relaxed mb-6">
+                    PTMs are scheduled at the end of every term. Check the calendar for specific dates and time slots for your child's class.
+                  </p>
+                  <button className="w-full py-4 bg-white/20 hover:bg-white/30 rounded-2xl font-black text-xs uppercase tracking-widest transition-all border border-white/20">
+                    View PTM Guidelines
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -4835,11 +5348,10 @@ const ShahwilayatApp = () => {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Term / Semester</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Assessment Date / Term</label>
                   <input 
                     required
-                    type="text" 
-                    placeholder="e.g. Mid Term 2024"
+                    type="date" 
                     className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none"
                     value={newGrade.term}
                     onChange={e => setNewGrade({...newGrade, term: e.target.value})}
@@ -5667,18 +6179,82 @@ const ShahwilayatApp = () => {
               </div>
               <form onSubmit={handleSendMessage} className="p-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Recipient</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Target Type</label>
                   <select 
                     className="w-full px-4 py-2 border border-gray-200 rounded-xl outline-none"
-                    value={messageForm.receiver_id}
-                    onChange={e => setMessageForm({...messageForm, receiver_id: e.target.value})}
+                    value={messageForm.target_type}
+                    onChange={e => setMessageForm({...messageForm, target_type: e.target.value as any})}
                   >
-                    <option value="">All Students (Announcement)</option>
-                    {user.role === 'admin' && students.map(s => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.roll_no})</option>
-                    ))}
+                    <option value="individual">Individual Student</option>
+                    <option value="grade">Entire Grade</option>
+                    <option value="class">Specific Class</option>
+                    <option value="section">Specific Section</option>
+                    <option value="all">All Students (Announcement)</option>
                   </select>
                 </div>
+
+                {messageForm.target_type === 'individual' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Recipient</label>
+                    <select 
+                      required
+                      className="w-full px-4 py-2 border border-gray-200 rounded-xl outline-none"
+                      value={messageForm.receiver_id}
+                      onChange={e => setMessageForm({...messageForm, receiver_id: e.target.value})}
+                    >
+                      <option value="">Select Student</option>
+                      {students.map(s => (
+                        <option key={s.id} value={s.id}>{s.name} ({s.roll_no})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {['grade', 'class', 'section'].includes(messageForm.target_type) && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Grade</label>
+                    <select 
+                      required
+                      className="w-full px-4 py-2 border border-gray-200 rounded-xl outline-none"
+                      value={messageForm.receiver_grade}
+                      onChange={e => setMessageForm({...messageForm, receiver_grade: e.target.value})}
+                    >
+                      <option value="">Select Grade</option>
+                      {[...new Set(students.map(s => s.grade))].sort().map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                  </div>
+                )}
+
+                {['class', 'section'].includes(messageForm.target_type) && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
+                    <select 
+                      required
+                      className="w-full px-4 py-2 border border-gray-200 rounded-xl outline-none"
+                      value={messageForm.receiver_class}
+                      onChange={e => setMessageForm({...messageForm, receiver_class: e.target.value})}
+                    >
+                      <option value="">Select Class</option>
+                      {[...new Set(students.filter(s => s.grade === messageForm.receiver_grade).map(s => s.class))].sort().map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                )}
+
+                {messageForm.target_type === 'section' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Section</label>
+                    <select 
+                      required
+                      className="w-full px-4 py-2 border border-gray-200 rounded-xl outline-none"
+                      value={messageForm.receiver_section}
+                      onChange={e => setMessageForm({...messageForm, receiver_section: e.target.value})}
+                    >
+                      <option value="">Select Section</option>
+                      {[...new Set(students.filter(s => s.grade === messageForm.receiver_grade && s.class === messageForm.receiver_class).map(s => s.section))].sort().map(sec => <option key={sec} value={sec}>{sec}</option>)}
+                    </select>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
                   <input 
@@ -5794,6 +6370,82 @@ const ShahwilayatApp = () => {
                 </div>
                 <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all mt-4">
                   Complete Transaction
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+        {showAddEvent && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-rose-500 text-white">
+                <h3 className="text-xl font-black tracking-tight">Add School Event</h3>
+                <button onClick={() => setShowAddEvent(false)} className="p-2 hover:bg-white/20 rounded-xl transition-all">
+                  <X size={24} />
+                </button>
+              </div>
+              <form onSubmit={handleAddEvent} className="p-8 space-y-6">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Event Title</label>
+                  <input 
+                    required
+                    type="text" 
+                    className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-rose-500/20 outline-none font-bold"
+                    value={newEvent.title}
+                    onChange={e => setNewEvent({...newEvent, title: e.target.value})}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Date</label>
+                    <input 
+                      required
+                      type="date" 
+                      className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-rose-500/20 outline-none font-bold"
+                      value={newEvent.date}
+                      onChange={e => setNewEvent({...newEvent, date: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Time</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. 9:00 AM"
+                      className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-rose-500/20 outline-none font-bold"
+                      value={newEvent.time}
+                      onChange={e => setNewEvent({...newEvent, time: e.target.value})}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Category</label>
+                  <select 
+                    className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-rose-500/20 outline-none font-bold"
+                    value={newEvent.category}
+                    onChange={e => setNewEvent({...newEvent, category: e.target.value as any})}
+                  >
+                    <option value="other">Other</option>
+                    <option value="academic">Academic</option>
+                    <option value="extracurricular">Extracurricular</option>
+                    <option value="administrative">Administrative</option>
+                    <option value="holiday">Holiday</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Location</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-rose-500/20 outline-none font-bold"
+                    value={newEvent.location}
+                    onChange={e => setNewEvent({...newEvent, location: e.target.value})}
+                  />
+                </div>
+                <button type="submit" className="w-full bg-rose-500 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-rose-600 transition-all shadow-xl shadow-rose-500/20">
+                  Save Event
                 </button>
               </form>
             </motion.div>

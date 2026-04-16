@@ -24,23 +24,29 @@ export interface Student {
 export interface User {
   id: number;
   name: string;
+  username?: string;
   role: 'admin' | 'student' | 'canteen' | 'guest' | 'teacher';
   student_id?: number;
   teacher_id?: number;
   canteen_id?: number;
   computer_number?: string;
+  balance?: number;
+  grade?: string;
+  class?: string;
+  section?: string;
 }
 
 export interface Transaction {
   id: number;
   student_id: number;
   amount: number;
-  type: 'credit' | 'debit';
+  type: 'credit' | 'debit' | 'fee';
   fee_type: 'tuition' | 'bus' | 'activity' | 'canteen' | 'other';
   description: string;
   date: string;
   student_name?: string;
   roll_no?: string;
+  canteen_staff_id?: number;
 }
 
 export interface Announcement {
@@ -94,9 +100,10 @@ export interface OnlineClass {
   subject: string;
   link: string;
   time: string;
+  teacher_name?: string;
 }
 
-export interface Event {
+export interface SchoolEvent {
   id: number;
   title: string;
   date: string;

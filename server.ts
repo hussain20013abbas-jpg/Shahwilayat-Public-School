@@ -3,6 +3,7 @@ import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
+import bcrypt from "bcryptjs";
 
 // Vercel compatibility for __dirname in both ESM and CJS
 const getDirname = () => {
@@ -21,21 +22,22 @@ if (process.env.VERCEL) {
   console.log('Vercel Debug - __dirname_compat Contents:', fs.readdirSync(__dirname_compat));
 }
 
-// Use /tmp for Vercel serverless environment compatibility
-let dbPath = path.join(process.cwd(), 'school.db');
+// Use DATABASE_PATH env var if provided, otherwise default to /tmp for Vercel
+let dbPath = process.env.DATABASE_PATH || path.join(process.cwd(), 'school.db');
 
 if (process.env.VERCEL) {
   const tmpDbPath = '/tmp/school.db';
-  console.log('Vercel environment detected. Attempting to use /tmp/school.db');
+  console.log('Vercel environment detected. Database location:', tmpDbPath);
   
   if (!fs.existsSync(tmpDbPath)) {
     try {
-      // Try multiple possible source paths
+      // Look for school.db in possible locations to bootstrap /tmp
       const possibleSources = [
+        process.env.DATABASE_PATH || '', // User provided path
         path.join(process.cwd(), 'school.db'),
         path.join(__dirname_compat, 'school.db'),
         path.join(__dirname_compat, '..', 'school.db')
-      ];
+      ].filter(Boolean);
       
       let sourcePath = '';
       for (const p of possibleSources) {
@@ -45,24 +47,21 @@ if (process.env.VERCEL) {
         }
       }
       
-      if (sourcePath) {
+      if (sourcePath && sourcePath !== tmpDbPath) {
         fs.copyFileSync(sourcePath, tmpDbPath);
-        console.log(`Successfully copied database from ${sourcePath} to ${tmpDbPath}`);
-      } else {
-        console.warn('Could not find source school.db, will create new one in /tmp');
+        console.log(`Successfully bootstrapped database from ${sourcePath}`);
       }
       dbPath = tmpDbPath;
     } catch (e) {
-      console.error('Failed to copy database to /tmp:', e);
-      dbPath = tmpDbPath; // Try /tmp anyway
+      console.error('Failed to prepare /tmp/school.db:', e);
+      dbPath = tmpDbPath;
     }
   } else {
-    console.log('/tmp/school.db already exists, using it.');
     dbPath = tmpDbPath;
   }
 }
 
-console.log(`Initializing database at: ${dbPath}`);
+console.log(`Using database at: ${dbPath}`);
 let db: Database.Database;
 try {
   db = new Database(dbPath, { verbose: console.log });
@@ -131,13 +130,18 @@ try {
     );
 
     -- Insert default admin if not exists
-    INSERT OR IGNORE INTO admins (name, username, password, role) VALUES ('Administrator', 'admin', 'admin123', 'admin');
-    INSERT OR IGNORE INTO teachers (name, username, password, subject) VALUES ('Demo Teacher', 'teacher', 'teacher123', 'Computer Science');
-    INSERT OR IGNORE INTO canteen_staff (name, username, password) VALUES ('Canteen Manager', 'canteen', 'canteen123');
+    const hashedAdminPass = bcrypt.hashSync('admin123', 10);
+    const hashedTeacherPass = bcrypt.hashSync('teacher123', 10);
+    const hashedCanteenPass = bcrypt.hashSync('canteen123', 10);
+    const hashedStudentPass = bcrypt.hashSync('student123', 10);
+
+    INSERT OR IGNORE INTO admins (name, username, password, role) VALUES ('Administrator', 'admin', hashedAdminPass, 'admin');
+    INSERT OR IGNORE INTO teachers (name, username, password, subject) VALUES ('Demo Teacher', 'teacher', hashedTeacherPass, 'Computer Science');
+    INSERT OR IGNORE INTO canteen_staff (name, username, password) VALUES ('Canteen Manager', 'canteen', hashedCanteenPass);
 
     -- Insert a default student for testing if none exist
     INSERT OR IGNORE INTO students (name, roll_no, grade, class, section, cnic, password, balance) 
-    VALUES ('Demo Student', '2024-001', '10', '10', 'A', '1234567890123', 'student123', 5000);
+    VALUES ('Demo Student', '2024-001', '10', '10', 'A', '1234567890123', hashedStudentPass, 5000);
 
     CREATE TABLE IF NOT EXISTS transactions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -183,10 +187,23 @@ try {
       sender_id INTEGER NOT NULL,
       sender_role TEXT NOT NULL,
       receiver_id INTEGER, -- NULL for all (announcement)
+      receiver_grade TEXT,
+      receiver_class TEXT,
+      receiver_section TEXT,
       title TEXT NOT NULL,
       content TEXT NOT NULL,
       is_read BOOLEAN DEFAULT 0,
       date DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      date DATE NOT NULL,
+      time TEXT,
+      location TEXT,
+      description TEXT,
+      category TEXT CHECK(category IN ('academic', 'extracurricular', 'administrative', 'holiday', 'other')) DEFAULT 'other'
     );
 
     CREATE TABLE IF NOT EXISTS syllabus (
@@ -251,7 +268,36 @@ try {
   const admin = db.prepare("SELECT * FROM admins WHERE username = 'admin'").get();
   if (!admin) {
     console.log('Default admin missing, inserting...');
-    db.prepare("INSERT INTO admins (name, username, password, role) VALUES (?, ?, ?, ?)").run('Administrator', 'admin', 'admin123', 'admin');
+    const hashedPassword = bcrypt.hashSync('admin123', 10);
+    db.prepare("INSERT INTO admins (name, username, password, role) VALUES (?, ?, ?, ?)").run('Administrator', 'admin', hashedPassword, 'admin');
+  }
+
+  // Initial Sample Data for "Fully Made" experience
+  const canteenCount = db.prepare("SELECT COUNT(*) as count FROM canteen_items").get() as any;
+  if (canteenCount.count === 0) {
+    console.log('Inserting sample canteen items...');
+    const samples = [
+      ['Chicken Sandwich', 150, 'Fast Food', 'Freshly made grilled chicken sandwich', 'https://picsum.photos/seed/sandwich/400/300'],
+      ['Fruit Bowl', 100, 'Healthy', 'Fresh seasonal fruits', 'https://picsum.photos/seed/fruit/400/300'],
+      ['Pasta Primavera', 180, 'Main Course', 'Veggie pasta with cream sauce', 'https://picsum.photos/seed/pasta/400/300'],
+      ['Lemonade', 50, 'Drinks', 'Refreshing chilled lemonade', 'https://picsum.photos/seed/lemonade/400/300']
+    ];
+    const stmt = db.prepare("INSERT INTO canteen_items (name, price, category, description, image_url) VALUES (?, ?, ?, ?, ?)");
+    samples.forEach(s => stmt.run(...s));
+  }
+
+  const announcmentCount = db.prepare("SELECT COUNT(*) as count FROM announcements").get() as any;
+  if (announcmentCount.count === 0) {
+    console.log('Inserting sample announcements...');
+    db.prepare("INSERT INTO announcements (title, content, category, target_role, is_featured) VALUES (?, ?, ?, ?, ?)")
+      .run('Welcome to SWPS Portal', 'We are excited to launch our new communication and canteen portal!', 'General', 'all', 1);
+  }
+
+  const teacherCount = db.prepare("SELECT COUNT(*) as count FROM teachers").get() as any;
+  if (teacherCount.count === 0) {
+    console.log('Inserting sample teachers...');
+    db.prepare("INSERT INTO teachers (name, subject, email, phone) VALUES (?, ?, ?, ?)")
+      .run('Dr. Sarah Ahmed', 'Mathematics', 'sarah.ahmed@swps.edu.pk', '+92 300 1234567');
   }
 } catch (err: any) {
   console.error('Database initialization error:', err);
@@ -362,6 +408,35 @@ async function startServer() {
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+  app.get('/api/canteen-items', (req, res) => {
+    try {
+      const items = db.prepare("SELECT * FROM canteen_items").all();
+      res.json(items);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch canteen items' });
+    }
+  });
+
+  app.post('/api/canteen-items', (req, res) => {
+    const { name, price, category, description, image_url } = req.body;
+    try {
+      db.prepare("INSERT INTO canteen_items (name, price, category, description, image_url) VALUES (?, ?, ?, ?, ?)")
+        .run(name, price, category, description, image_url);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to add canteen item' });
+    }
+  });
+
+  app.delete('/api/canteen-items/:id', (req, res) => {
+    try {
+      db.prepare("DELETE FROM canteen_items WHERE id = ?").run(req.params.id);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to delete item' });
+    }
+  });
+
   // Health check route - ALWAYS available
   app.get("/health", (req, res) => {
     let dbStatus = "unknown";
@@ -402,7 +477,12 @@ async function startServer() {
       if (!user) {
         return res.status(401).json({ error: "Username not found" });
       }
-      if (user.password !== password) {
+      
+      const isMatch = (user.password.startsWith('$2a$') || user.password.startsWith('$2b$'))
+        ? bcrypt.compareSync(password, user.password)
+        : user.password === password;
+
+      if (!isMatch) {
         return res.status(401).json({ error: "Incorrect password" });
       }
 
@@ -470,11 +550,25 @@ async function startServer() {
       const user = db.prepare(`SELECT password FROM ${table} WHERE id = ?`).get(userId) as any;
       if (!user) return res.status(404).json({ error: "User not found" });
       
-      if (user.password !== oldPassword) {
+      const isMatch = (user.password.startsWith('$2a$') || user.password.startsWith('$2b$'))
+        ? bcrypt.compareSync(oldPassword, user.password)
+        : user.password === oldPassword;
+
+      if (!isMatch) {
         return res.status(401).json({ error: "Incorrect current password" });
       }
 
-      db.prepare(`UPDATE ${table} SET password = ? WHERE id = ?`).run(newPassword, userId);
+      const hashedPassword = bcrypt.hashSync(newPassword, 10);
+      db.prepare(`UPDATE ${table} SET password = ? WHERE id = ?`).run(hashedPassword, userId);
+      
+      // Also update linked admin account if it's a student/teacher/canteen
+      if (role === 'student') {
+        db.prepare("UPDATE admins SET password = ? WHERE student_id = ?").run(hashedPassword, userId);
+      } else if (role === 'teacher') {
+        db.prepare("UPDATE admins SET password = ? WHERE teacher_id = ?").run(hashedPassword, userId);
+      } else if (role === 'canteen') {
+        db.prepare("UPDATE admins SET password = ? WHERE canteen_id = ?").run(hashedPassword, userId);
+      }
       res.json({ success: true, message: "Password updated successfully" });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -483,10 +577,20 @@ async function startServer() {
 
   app.get("/api/messages", (req, res) => {
     try {
-      const { userId, role } = req.query;
+      const { userId, role, grade, class: className, section } = req.query;
       let messages;
       if (role === 'admin') {
         messages = db.prepare("SELECT * FROM messages ORDER BY date DESC").all();
+      } else if (role === 'student') {
+        messages = db.prepare(`
+          SELECT * FROM messages 
+          WHERE receiver_id = ? 
+          OR (receiver_grade = ? AND receiver_class IS NULL)
+          OR (receiver_grade = ? AND receiver_class = ? AND receiver_section IS NULL)
+          OR (receiver_grade = ? AND receiver_class = ? AND receiver_section = ?)
+          OR (receiver_id IS NULL AND receiver_grade IS NULL)
+          ORDER BY date DESC
+        `).all(userId, grade, grade, className, grade, className, section);
       } else {
         messages = db.prepare("SELECT * FROM messages WHERE receiver_id = ? OR receiver_id IS NULL ORDER BY date DESC").all(userId);
       }
@@ -498,11 +602,11 @@ async function startServer() {
 
   app.post("/api/messages", (req, res) => {
     try {
-      const { sender_id, sender_role, receiver_id, title, content } = req.body;
+      const { sender_id, sender_role, receiver_id, receiver_grade, receiver_class, receiver_section, title, content } = req.body;
       const result = db.prepare(`
-        INSERT INTO messages (sender_id, sender_role, receiver_id, title, content)
-        VALUES (?, ?, ?, ?, ?)
-      `).run(sender_id, sender_role, receiver_id, title, content);
+        INSERT INTO messages (sender_id, sender_role, receiver_id, receiver_grade, receiver_class, receiver_section, title, content)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(sender_id, sender_role, receiver_id || null, receiver_grade || null, receiver_class || null, receiver_section || null, title, content);
       res.json({ id: result.lastInsertRowid });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -588,12 +692,13 @@ async function startServer() {
   app.post("/api/teachers", (req, res) => {
     try {
       const { name, username, password, subject } = req.body;
+      const hashedPassword = bcrypt.hashSync(password, 10);
       const transaction = db.transaction(() => {
-        const result = db.prepare("INSERT INTO teachers (name, username, password, subject) VALUES (?, ?, ?, ?)").run(name, username, password, subject);
+        const result = db.prepare("INSERT INTO teachers (name, username, password, subject) VALUES (?, ?, ?, ?)").run(name, username, hashedPassword, subject);
         const teacherId = result.lastInsertRowid;
         
         // Create admin entry for login
-        db.prepare("INSERT INTO admins (name, username, password, role, teacher_id) VALUES (?, ?, ?, 'teacher', ?)").run(name, username, password, teacherId);
+        db.prepare("INSERT INTO admins (name, username, password, role, teacher_id) VALUES (?, ?, ?, 'teacher', ?)").run(name, username, hashedPassword, teacherId);
         
         return teacherId;
       });
@@ -613,9 +718,13 @@ async function startServer() {
     const { name, username, password, subject } = req.body;
     try {
       const transaction = db.transaction(() => {
-        db.prepare("UPDATE teachers SET name = ?, username = ?, password = ?, subject = ? WHERE id = ?").run(name, username, password, subject, id);
+        let finalPassword = password;
+        if (password && !password.startsWith('$2a$') && !password.startsWith('$2b$')) {
+          finalPassword = bcrypt.hashSync(password, 10);
+        }
+        db.prepare("UPDATE teachers SET name = ?, username = ?, password = ?, subject = ? WHERE id = ?").run(name, username, finalPassword, subject, id);
         // Update linked admin account
-        db.prepare("UPDATE admins SET name = ?, username = ?, password = ? WHERE teacher_id = ?").run(name, username, password, id);
+        db.prepare("UPDATE admins SET name = ?, username = ?, password = ? WHERE teacher_id = ?").run(name, username, finalPassword, id);
       });
       
       transaction();
@@ -640,12 +749,13 @@ async function startServer() {
   app.post("/api/canteen_staff", (req, res) => {
     try {
       const { name, username, password } = req.body;
+      const hashedPassword = bcrypt.hashSync(password, 10);
       const transaction = db.transaction(() => {
-        const result = db.prepare("INSERT INTO canteen_staff (name, username, password) VALUES (?, ?, ?)").run(name, username, password);
+        const result = db.prepare("INSERT INTO canteen_staff (name, username, password) VALUES (?, ?, ?)").run(name, username, hashedPassword);
         const staffId = result.lastInsertRowid;
         
         // Create admin entry for login
-        db.prepare("INSERT INTO admins (name, username, password, role, canteen_id) VALUES (?, ?, ?, 'canteen', ?)").run(name, username, password, staffId);
+        db.prepare("INSERT INTO admins (name, username, password, role, canteen_id) VALUES (?, ?, ?, 'canteen', ?)").run(name, username, hashedPassword, staffId);
         
         return staffId;
       });
@@ -665,9 +775,13 @@ async function startServer() {
     const { name, username, password } = req.body;
     try {
       const transaction = db.transaction(() => {
-        db.prepare("UPDATE canteen_staff SET name = ?, username = ?, password = ? WHERE id = ?").run(name, username, password, id);
+        let finalPassword = password;
+        if (password && !password.startsWith('$2a$') && !password.startsWith('$2b$')) {
+          finalPassword = bcrypt.hashSync(password, 10);
+        }
+        db.prepare("UPDATE canteen_staff SET name = ?, username = ?, password = ? WHERE id = ?").run(name, username, finalPassword, id);
         // Update linked admin account
-        db.prepare("UPDATE admins SET name = ?, username = ?, password = ? WHERE canteen_id = ?").run(name, username, password, id);
+        db.prepare("UPDATE admins SET name = ?, username = ?, password = ? WHERE canteen_id = ?").run(name, username, finalPassword, id);
       });
       
       transaction();
@@ -683,7 +797,8 @@ async function startServer() {
   app.post("/api/admins", (req, res) => {
     try {
       const { name, username, password, role, student_id, teacher_id } = req.body;
-      const result = db.prepare("INSERT INTO admins (name, username, password, role, student_id, teacher_id) VALUES (?, ?, ?, ?, ?, ?)").run(name, username, password, role || 'admin', student_id || null, teacher_id || null);
+      const hashedPassword = bcrypt.hashSync(password, 10);
+      const result = db.prepare("INSERT INTO admins (name, username, password, role, student_id, teacher_id) VALUES (?, ?, ?, ?, ?, ?)").run(name, username, hashedPassword, role || 'admin', student_id || null, teacher_id || null);
       res.json({ id: result.lastInsertRowid, success: true });
     } catch (err: any) {
       if (err.message.includes('UNIQUE constraint failed')) {
@@ -698,17 +813,21 @@ async function startServer() {
     const { name, username, password, role, student_id, teacher_id, canteen_id } = req.body;
     try {
       const transaction = db.transaction(() => {
-        db.prepare("UPDATE admins SET name = ?, username = ?, password = ?, role = ?, student_id = ?, teacher_id = ?, canteen_id = ? WHERE id = ?").run(name, username, password, role, student_id || null, teacher_id || null, canteen_id || null, id);
+        let finalPassword = password;
+        if (password && !password.startsWith('$2a$') && !password.startsWith('$2b$')) {
+          finalPassword = bcrypt.hashSync(password, 10);
+        }
+        db.prepare("UPDATE admins SET name = ?, username = ?, password = ?, role = ?, student_id = ?, teacher_id = ?, canteen_id = ? WHERE id = ?").run(name, username, finalPassword, role, student_id || null, teacher_id || null, canteen_id || null, id);
         
         // Synchronize with linked profiles
         if (student_id) {
-          db.prepare("UPDATE students SET name = ?, roll_no = ?, password = ? WHERE id = ?").run(name, username, password, student_id);
+          db.prepare("UPDATE students SET name = ?, roll_no = ?, password = ? WHERE id = ?").run(name, username, finalPassword, student_id);
         }
         if (teacher_id) {
-          db.prepare("UPDATE teachers SET name = ?, username = ?, password = ? WHERE id = ?").run(name, username, password, teacher_id);
+          db.prepare("UPDATE teachers SET name = ?, username = ?, password = ? WHERE id = ?").run(name, username, finalPassword, teacher_id);
         }
         if (canteen_id) {
-          db.prepare("UPDATE canteen_staff SET name = ?, username = ?, password = ? WHERE id = ?").run(name, username, password, canteen_id);
+          db.prepare("UPDATE canteen_staff SET name = ?, username = ?, password = ? WHERE id = ?").run(name, username, finalPassword, canteen_id);
         }
       });
       transaction();
@@ -776,26 +895,31 @@ async function startServer() {
   app.post("/api/reset-password", (req, res) => {
     const { type, identifier, verification, new_password } = req.body;
     try {
+      const hashedPassword = bcrypt.hashSync(new_password, 10);
       if (type === 'student') {
         const student = db.prepare("SELECT * FROM students WHERE cnic = ? AND parent_contact = ?").get(identifier, verification) as any;
         if (!student) {
           return res.status(404).json({ error: "Student not found with these details" });
         }
-        db.prepare("UPDATE students SET password = ? WHERE id = ?").run(new_password, student.id);
+        db.prepare("UPDATE students SET password = ? WHERE id = ?").run(hashedPassword, student.id);
+        // Also update linked admin entry
+        db.prepare("UPDATE admins SET password = ? WHERE student_id = ?").run(hashedPassword, student.id);
         res.json({ message: "Password reset successful" });
       } else if (type === 'admin') {
         const admin = db.prepare("SELECT * FROM admins WHERE username = ?").get(identifier) as any;
         if (!admin) {
           return res.status(404).json({ error: "Admin not found" });
         }
-        db.prepare("UPDATE admins SET password = ? WHERE id = ?").run(new_password, admin.id);
+        db.prepare("UPDATE admins SET password = ? WHERE id = ?").run(hashedPassword, admin.id);
         res.json({ message: "Password reset successful" });
       } else if (type === 'canteen') {
         const staff = db.prepare("SELECT * FROM canteen_staff WHERE username = ?").get(identifier) as any;
         if (!staff) {
           return res.status(404).json({ error: "Canteen staff not found" });
         }
-        db.prepare("UPDATE canteen_staff SET password = ? WHERE id = ?").run(new_password, staff.id);
+        db.prepare("UPDATE canteen_staff SET password = ? WHERE id = ?").run(hashedPassword, staff.id);
+        // Update linked admin entry
+        db.prepare("UPDATE admins SET password = ? WHERE canteen_id = ?").run(hashedPassword, staff.id);
         res.json({ message: "Password reset successful" });
       } else {
         // Fallback for old client code
@@ -805,7 +929,9 @@ async function startServer() {
           if (!student) {
             return res.status(404).json({ error: "Student not found with these details" });
           }
-          db.prepare("UPDATE students SET password = ? WHERE id = ?").run(new_password, student.id);
+          db.prepare("UPDATE students SET password = ? WHERE id = ?").run(hashedPassword, student.id);
+          // Also update linked admin account
+          db.prepare("UPDATE admins SET password = ? WHERE student_id = ?").run(hashedPassword, student.id);
           return res.json({ message: "Password reset successful" });
         }
         res.status(400).json({ error: "Invalid request" });
@@ -840,12 +966,13 @@ async function startServer() {
   app.post("/api/students", (req, res) => {
     const { name, roll_no, grade, class: className, section, parent_contact, parent_email, emergency_contact, academic_notes, medical_notes, photo_url, cnic, computer_number, password } = req.body;
     try {
+      const hashedPassword = bcrypt.hashSync(password || 'password123', 10);
       const transaction = db.transaction(() => {
-        const info = db.prepare("INSERT INTO students (name, roll_no, grade, class, section, parent_contact, parent_email, emergency_contact, academic_notes, medical_notes, photo_url, cnic, computer_number, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(name, roll_no, grade, className, section, parent_contact, parent_email, emergency_contact, academic_notes, medical_notes, photo_url, cnic, computer_number, password || 'password123');
+        const info = db.prepare("INSERT INTO students (name, roll_no, grade, class, section, parent_contact, parent_email, emergency_contact, academic_notes, medical_notes, photo_url, cnic, computer_number, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(name, roll_no, grade, className, section, parent_contact, parent_email, emergency_contact, academic_notes, medical_notes, photo_url, cnic, computer_number, hashedPassword);
         const studentId = info.lastInsertRowid;
         
         // Also create an admin entry for login
-        db.prepare("INSERT INTO admins (name, username, password, role, student_id) VALUES (?, ?, ?, 'student', ?)").run(name, roll_no, password || 'password123', studentId);
+        db.prepare("INSERT INTO admins (name, username, password, role, student_id) VALUES (?, ?, ?, 'student', ?)").run(name, roll_no, hashedPassword, studentId);
         
         return studentId;
       });
@@ -866,6 +993,11 @@ async function startServer() {
     const { name, roll_no, grade, class: className, section, parent_contact, parent_email, emergency_contact, academic_notes, medical_notes, photo_url, cnic, computer_number, password } = req.body;
     try {
       const transaction = db.transaction(() => {
+        let finalPassword = password;
+        if (password && !password.startsWith('$2a$') && !password.startsWith('$2b$')) {
+          finalPassword = bcrypt.hashSync(password, 10);
+        }
+
         db.prepare(`
           UPDATE students SET 
             name = ?, roll_no = ?, grade = ?, class = ?, section = ?, 
@@ -873,10 +1005,10 @@ async function startServer() {
             academic_notes = ?, medical_notes = ?, photo_url = ?, 
             cnic = ?, computer_number = ?, password = ?
           WHERE id = ?
-        `).run(name, roll_no, grade, className, section, parent_contact, parent_email, emergency_contact, academic_notes, medical_notes, photo_url, cnic, computer_number, password, id);
+        `).run(name, roll_no, grade, className, section, parent_contact, parent_email, emergency_contact, academic_notes, medical_notes, photo_url, cnic, computer_number, finalPassword, id);
         
         // Update linked admin account
-        db.prepare("UPDATE admins SET name = ?, username = ?, password = ? WHERE student_id = ?").run(name, roll_no, password, id);
+        db.prepare("UPDATE admins SET name = ?, username = ?, password = ? WHERE student_id = ?").run(name, roll_no, finalPassword, id);
       });
       
       transaction();
@@ -1222,43 +1354,43 @@ async function startServer() {
     }
   });
 
+  // Events
+  app.get("/api/events", (req, res) => {
+    try {
+      const events = db.prepare("SELECT * FROM events ORDER BY date ASC").all();
+      res.json(events);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/events", (req, res) => {
+    try {
+      const { title, date, time, location, description, category } = req.body;
+      db.prepare(`
+        INSERT INTO events (title, date, time, location, description, category)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(title, date, time, location, description, category);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/events/:id", (req, res) => {
+    try {
+      db.prepare("DELETE FROM events WHERE id = ?").run(req.params.id);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Global error handler for API
   app.use("/api", (err: any, req: any, res: any, next: any) => {
     console.error("API Error:", err);
     res.status(500).json({ error: err.message || "Internal Server Error" });
   });
-
-  // Vite middleware for development
-  const isDev = process.env.NODE_ENV === "development" || !process.env.NODE_ENV;
-  const distPath = path.join(__dirname_compat, "dist");
-  const indexExists = fs.existsSync(path.join(distPath, "index.html"));
-  
-  console.log("Environment Check:", {
-    NODE_ENV: process.env.NODE_ENV,
-    isDev,
-    distPath,
-    indexExists
-  });
-
-  if (isDev && !indexExists) {
-    console.log("Starting in DEVELOPMENT mode with Vite");
-    try {
-      const { createServer: createViteServer } = await import("vite");
-      const vite = await createViteServer({
-        server: { middlewareMode: true },
-        appType: "spa",
-      });
-      app.use(vite.middlewares);
-    } catch (e) {
-      console.error("Failed to start Vite server:", e);
-    }
-  } else {
-    console.log("Starting in PRODUCTION/STATIC mode");
-    if (!indexExists) {
-      console.warn("WARNING: index.html not found in dist folder!");
-    }
-    serveStatic(app);
-  }
 
   // Distribute surplus among students, teachers, admins, and canteen staff
   app.post('/api/distribute-surplus', (req, res) => {
@@ -1331,6 +1463,66 @@ async function startServer() {
       res.status(500).json({ error: 'Internal server error' });
     }
   });
+
+  // AI Chat Proxy Endpoint
+  app.post('/api/ai/chat', async (req, res) => {
+    try {
+      const { message, systemInstruction } = req.body;
+      const apiKey = process.env.GEMINI_API_KEY;
+
+      if (!apiKey) {
+        return res.status(500).json({ error: "GEMINI_API_KEY is not configured on the server." });
+      }
+
+      const { GoogleGenAI } = await import("@google/genai");
+      const genAI = new GoogleGenAI(apiKey as any);
+      const model = (genAI as any).getGenerativeModel({ 
+        model: "gemini-1.5-flash",
+        systemInstruction: systemInstruction 
+      });
+
+      const result = await model.generateContent(message);
+      const response = await result.response;
+      const text = response.text();
+
+      res.json({ text });
+    } catch (error: any) {
+      console.error("AI Proxy Error:", error);
+      res.status(500).json({ error: error.message || "Failed to get AI response" });
+    }
+  });
+
+  // Vite middleware for development
+  const isDev = process.env.NODE_ENV === "development" || !process.env.NODE_ENV;
+  const distPath = path.join(__dirname_compat, "dist");
+  const indexExists = fs.existsSync(path.join(distPath, "index.html"));
+  
+  console.log("Environment Check:", {
+    NODE_ENV: process.env.NODE_ENV,
+    isDev,
+    distPath,
+    indexExists
+  });
+
+  if (isDev && !indexExists) {
+    console.log("Starting in DEVELOPMENT mode with Vite");
+    try {
+      const { createServer: createViteServer } = await import("vite");
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } catch (e) {
+      console.error("Failed to start Vite server:", e);
+    }
+  } else {
+    console.log("Starting in PRODUCTION/STATIC mode");
+    if (!indexExists) {
+      console.warn("WARNING: index.html not found in dist folder!");
+    }
+    serveStatic(app);
+  }
 
   // Error handling middleware
   app.use((err: any, req: any, res: any, next: any) => {
